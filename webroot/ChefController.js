@@ -13,6 +13,7 @@ const ChefController = (() => {
   let _endTime = 0, _remainingMs = 0;
   let _cravings = [];
   let _staff = [];
+  let _chefSpeedLevel = 0;
 
   const _DISH_CRAVE = { burger: 'grilled', fries: 'street', cola: 'sweet', coffee: 'comfort' };
   function _cravingMult(dish) {
@@ -149,6 +150,7 @@ const ChefController = (() => {
     window.dispatchEvent(new CustomEvent('dk:shiftEnded', { detail: {
       coins: _shiftCoins, total: _coins, served: _served, rep: _rep, day: _day,
       goal: _goal, goalStars: _goalStars() } }));
+    _save();
     _day++;
   }
   function startShift(tier) {
@@ -188,8 +190,29 @@ const ChefController = (() => {
   // ── Staff ────────────────────────────────────────────────────────────────────
   function _cookIds() { return _staff.filter(s => s.role === 'cook').map(s => s.stationId); }
   function _syncCookBadges() { window.STATION_MGR?.setCookStations(_cookIds()); }
-  function hireCook(stationId) { _staff.push({ role: 'cook', stationId }); window.STAFF_MGR?.addCook(stationId); _syncCookBadges(); send('HIRE_COOK', { stationId }); }
-  function hireWaiter() { _staff.push({ role: 'waiter' }); window.STAFF_MGR?.addWaiter(); send('HIRE_SERVER', { stationId: 'any' }); }
+  function hireCook(stationId) { _staff.push({ role: 'cook', stationId }); window.STAFF_MGR?.addCook(stationId); _syncCookBadges(); _save(); }
+  function hireWaiter() { _staff.push({ role: 'waiter' }); window.STAFF_MGR?.addWaiter(); _save(); }
+
+  // ── Persistence: SAVE_STATE is the source of truth so coins/upgrades/staff stick
+  //   even if the player never opens the shop (the old inline-onclick shop was the
+  //   only saver, which the Devvit CSP blocked → "money didn't flow" across reloads).
+  function _save() {
+    const stMgr = window.STATION_MGR;
+    const cookStations = new Set(_staff.filter(s => s.role === 'cook').map(s => s.stationId));
+    const waiters = _staff.filter(s => s.role === 'waiter').length;
+    const stations = (stMgr?.getStations() || []).filter(s => s.kind === 'cook' || s.kind === 'maker').map((st, i) => ({
+      id: st.id, x: i, y: 0, stationType: st.defId, level: st.level, hasCook: cookStations.has(st.id), hasServer: false,
+    }));
+    const crew = Array.from({ length: waiters }, (_, i) => ({ slotIndex: i, personality: 'steady', name: 'Waiter ' + (i + 1), subredditOrigin: '' }));
+    send('SAVE_STATE', { state: {
+      saveVersion: 1, coins: _coins, renown: 0, tradeTokens: 0, lifetimeCoinsThisRun: _coins,
+      stations, crew, voyageCount: 0, unlockedCuisineTiers: _kitchenTier - 1,
+      incomeMultiplierLevel: 0, offlineCapLevel: 0, offlineEffLevel: 0, cookSpeedLevel: _chefSpeedLevel,
+      startingCoinsLevel: 0, extraRerollUnlocked: false, royaltyBoostLevel: 0,
+      streak: 0, lastStreakDate: '', rerollsToday: 0, lastSeen: Date.now(), incomePerSec: 0,
+    } });
+  }
+  setInterval(() => { if (_shiftActive && !_paused) _save(); }, 15000); // periodic autosave
   function getStaff() { return _staff.slice(); }
   function countStaff(role) { return _staff.filter(s => s.role === role).length; }
 
@@ -200,7 +223,7 @@ const ChefController = (() => {
   function getRep() { return _rep; }
   function getDay() { return _day; }
   function setKitchenTier(t) { _kitchenTier = t; }
-  function upgradeChefSpeed(level) { window._cookSpeedMult = Math.max(0.4, 1 - level * 0.12); } // prep speed
+  function upgradeChefSpeed(level) { _chefSpeedLevel = level || 0; window._cookSpeedMult = Math.max(0.4, 1 - _chefSpeedLevel * 0.12); } // prep speed
   function upgradeTraySize() { /* no tray in the assembly model */ }
 
   // ── Server hydrate ───────────────────────────────────────────────────────────
@@ -209,13 +232,16 @@ const ChefController = (() => {
     _coins = st.coins || 0;
     _cravings = ev.detail?.cravings?.cravings?.multipliers || [];
     _kitchenTier = Math.min(5, (st.unlockedCuisineTiers || 0) + 1);
-    upgradeTraySize(st.offlineEffLevel || 0);
+    upgradeChefSpeed(st.cookSpeedLevel || 0);
     (st.crew || []).forEach(() => _staff.push({ role: 'waiter' }));
     (st.stations || []).forEach(s => { if (s.hasCook) _staff.push({ role: 'cook', stationId: s.id }); });
     _updateCoins(); _setRep(_rep);
     window.setTimeout(() => {
       if (window.CHEF_SCENE && window.STATION_MGR) {
-        window.STAFF_MGR?.restore(_staff); _syncCookBadges(); startShift(_kitchenTier);
+        window.STATION_MGR.restoreLevels?.(st.stations);   // restore upgrade levels
+        window.CHEF_SCENE.rebuildKitchen?.(_kitchenTier);  // rebuild to saved tier (re-inits stations w/ levels)
+        window.STAFF_MGR?.restore(_staff); _syncCookBadges();
+        startShift(_kitchenTier);
       }
     }, 500);
   });

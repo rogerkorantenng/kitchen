@@ -461,6 +461,7 @@ const StationManager = (() => {
   }
   function rebuildForTier(tier) { _init(tier); }
   function setCookStations(ids) { _cookSet = new Set(ids || []); }
+  function restoreLevels(saved) { (saved || []).forEach(s => { if (s && s.id != null && typeof s.level === 'number') _levels[s.id] = s.level; }); }
 
   window.addEventListener('dk:sceneReady',     () => _init(_kitchenTier));
   window.addEventListener('dk:kitchenRebuilt', (ev) => _init(ev.detail.tier));
@@ -468,7 +469,7 @@ const StationManager = (() => {
 
   return { getStations, stationAt, startCook, startMake, takeFrom, putTo, canPlace, hasReady,
     servableSources, idleMakers, upgradableStations, getUpgradeCost, upgradeStation,
-    setDropHighlight, clearDropHighlight, resetForNewShift, rebuildForTier, setCookStations };
+    setDropHighlight, clearDropHighlight, resetForNewShift, rebuildForTier, setCookStations, restoreLevels };
 })();
 
 window.STATION_MGR = StationManager;
