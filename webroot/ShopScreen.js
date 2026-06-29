@@ -5,13 +5,14 @@
 
 const ShopScreen = (() => {
   let _coins = 0, _total = 0, _shiftEarned = 0, _served = 0, _rep = 60, _day = 1;
-  let _tier = 1;
+  let _tier = 1, _mode = 'end';
   let _ups = { chefSpeed: 0, traySize: 0 };
 
   function _fmt(n) { n = Math.floor(n); return n >= 1e3 ? (n/1e3).toFixed(1)+'K' : String(n); }
   function _sync() { window.CHEF_CTRL?.setCoins(_coins); }
 
   function show(detail) {
+    _mode = 'end';
     _shiftEarned = detail.coins || 0;
     _total = detail.total || 0;
     _coins = _total;
@@ -22,6 +23,17 @@ const ShopScreen = (() => {
     if (!el) return;
     el.style.display = 'block';
     _render(el);
+  }
+  // Open mid-shift (pauses the shift); purchases take effect immediately.
+  function openInShift() {
+    const ctrl = window.CHEF_CTRL; if (!ctrl) return;
+    _mode = 'shift';
+    _coins = ctrl.getCoins(); _total = _coins;
+    _day = ctrl.getDay(); _rep = ctrl.getRep(); _tier = ctrl.getTier();
+    const el = document.getElementById('shop-overlay'); if (!el) return;
+    el.style.display = 'block';
+    _render(el);
+    ctrl.pauseShift();
   }
   function hide() { const el = document.getElementById('shop-overlay'); if (el) el.style.display = 'none'; }
 
@@ -37,10 +49,10 @@ const ShopScreen = (() => {
     el.innerHTML = `
       <div class="shop-root">
         <div class="shop-header">
-          <div class="shop-h-title">🍳 Day ${_day} Complete!</div>
-          <div class="shop-h-earned">🪙 ${_fmt(_shiftEarned)}</div>
+          <div class="shop-h-title">${_mode === 'shift' ? '🛒 Upgrade Shop' : '🍳 Day ' + _day + ' Complete!'}</div>
+          <div class="shop-h-earned">🪙 ${_fmt(_mode === 'shift' ? _coins : _shiftEarned)}</div>
           <div class="shop-h-stats">
-            <span>🍽 ${_served} served</span>
+            <span>${_mode === 'shift' ? '⏸ Day ' + _day : '🍽 ' + _served + ' served'}</span>
             <span>${'⭐'.repeat(stars)}${'☆'.repeat(5-stars)}</span>
           </div>
         </div>
@@ -64,7 +76,9 @@ const ShopScreen = (() => {
         </div>
 
         <div class="shop-foot">
-          <button onclick="window._shopNext()" class="shop-next">▶ Open for Day ${_day + 1}</button>
+          ${_mode === 'shift'
+            ? `<button onclick="window._shopResume()" class="shop-next">▶ Resume Cooking</button>`
+            : `<button onclick="window._shopNext()" class="shop-next">▶ Open for Day ${_day + 1}</button>`}
         </div>
       </div>`;
   }
@@ -241,8 +255,15 @@ const ShopScreen = (() => {
     }});
   }
 
+  window._shopResume = () => {
+    hide(); _sync(); _persist();
+    window.CHEF_CTRL?.resumeShift();
+    window.dispatchEvent(new CustomEvent('dk:shopClosed'));
+  };
+
   // ── Listeners ─────────────────────────────────────────────────────────────────
   window.addEventListener('dk:shiftEnded', (ev) => { window.setTimeout(() => show(ev.detail), 1100); });
+  window.addEventListener('dk:openShop', () => openInShift());
   window.addEventListener('devvit:INIT_RESPONSE', (ev) => {
     const st = ev.detail?.state || {};
     _coins = st.coins || 0; _total = _coins;
@@ -251,7 +272,7 @@ const ShopScreen = (() => {
     _ups.traySize = st.offlineEffLevel || 0;
   });
 
-  return { show, hide };
+  return { show, hide, openInShift };
 })();
 
 window.SHOP_SCREEN = ShopScreen;

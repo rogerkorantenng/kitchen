@@ -26,8 +26,11 @@ const HUD = (() => {
           <div id="hud-timer" class="hud-timer">1:00</div>
         </div>
         <div class="hud-right">
-          <div id="hud-rep" class="hud-rep">⭐⭐⭐</div>
-          <div class="hud-coins"><span class="hud-coin-i">🪙</span><span id="hud-coins">0</span></div>
+          <button id="hud-shop" class="hud-shop" onclick="window.dispatchEvent(new CustomEvent('dk:openShop'))">🛒</button>
+          <div class="hud-rc">
+            <div id="hud-rep" class="hud-rep">⭐⭐⭐</div>
+            <div class="hud-coins"><span class="hud-coin-i">🪙</span><span id="hud-coins">0</span></div>
+          </div>
         </div>
       </div>`;
   }
@@ -78,6 +81,12 @@ const HUD = (() => {
     const el = document.getElementById('hud-timer');
     if (el) { el.textContent = 'CLOSED'; el.classList.add('hud-timer-low'); }
   });
+  window.addEventListener('dk:shiftPaused', () => {
+    if (_timerInterval) clearInterval(_timerInterval);
+    const el = document.getElementById('hud-timer');
+    if (el) el.textContent = '⏸ ' + el.textContent;
+  });
+  window.addEventListener('dk:shiftResumed', (ev) => _startTimer(ev.detail.remainingMs));
 
   function _setHarbor(harborId, mults) {
     const h = document.getElementById('hud-harbor');

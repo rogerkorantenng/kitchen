@@ -51,11 +51,6 @@ const StationManager = (() => {
     objs.pips = scene.add.graphics().setDepth(22);
     _drawPips(objs.pips, st, cx, cy, w, h);
 
-    // cook badge (auto-cook)
-    objs.cook = scene.add.text(cx - w * 0.42, cy - h * 0.5, '👨‍🍳', {
-      fontSize: Math.round(w * 0.22) + 'px',
-    }).setOrigin(0.5).setDepth(24).setVisible(_cookStations.has(st.id));
-
     // progress bar (front of station)
     objs.prog = scene.add.graphics().setDepth(23).setVisible(false);
 
@@ -248,10 +243,7 @@ const StationManager = (() => {
       st.objs.upg.setText(coins >= getUpgradeCost(st.id) && st.level < 4 ? '💰' : '');
     });
   }
-  function setCookStations(ids) {
-    _cookStations = new Set(ids || []);
-    Object.values(_stations).forEach(st => st.objs.cook?.setVisible(_cookStations.has(st.id)));
-  }
+  function setCookStations(ids) { _cookStations = new Set(ids || []); }
   function resetForNewShift() {
     Object.values(_stations).forEach(st => { st.cooking = false; st.ready = false; _hideReady(st); });
   }

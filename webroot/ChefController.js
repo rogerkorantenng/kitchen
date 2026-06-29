@@ -8,7 +8,8 @@ const ChefController = (() => {
   let _trayMax = CHEF_TRAY_BASE;
   let _coins = 0, _shiftCoins = 0, _served = 0;
   let _rep = 60, _day = 1, _kitchenTier = 1;
-  let _shiftTimer = null, _shiftActive = false;
+  let _shiftTimer = null, _shiftActive = false, _paused = false;
+  let _endTime = 0, _remainingMs = 0;
   let _cravings = [];
   let _staff = [];
 
@@ -30,14 +31,21 @@ const ChefController = (() => {
   function _setRep(v) { _rep = Math.max(0, Math.min(100, v)); window.dispatchEvent(new CustomEvent('dk:repChanged', { detail: { rep: _rep } })); }
 
   // ── SHARED: deliver one dish to a customer + award (player taps + auto-waiter) ─
-  function deliverDish(custId, dish) {
+  // `from` = {x,y} source of the dish (player tray or a waiter), for the fly animation.
+  function deliverDish(custId, dish, from) {
     const custMgr = window.CUSTOMER_MGR, scene = window.CHEF_SCENE;
     if (!custMgr || !scene) return { accepted: false };
     const res = custMgr.deliverItem(custId, dish);
     if (!res.accepted) return res;
     const sp = custMgr.getServePoint(custId) || { x: scene.W/2, y: scene.diningH };
     const ly = (sp.y || scene.diningH) - 18;
-    if (!res.complete) { scene.showFloatText(sp.x, ly, '✓', '#22c55e', 14); return res; }
+    // animate the plated dish flying to the customer
+    const tray = scene.trayCenter ? scene.trayCenter() : { cx: scene.W/2, cy: scene.H*0.9 };
+    const fx = from ? from.x : tray.cx, fy = from ? from.y : tray.cy;
+    scene.flyDish(fx, fy, sp.x, sp.y + 8, STATIONS[dish]?.emoji || '🍽️', () => {
+      if (res.complete && window.PARTICLE_FX) window.PARTICLE_FX.serveBurst(sp.x, sp.y);
+    });
+    if (!res.complete) return res;
     const craving = (res.order || []).reduce((m, t) => Math.max(m, _cravingMult(t)), 1);
     const earned = Math.ceil(res.baseEarned * craving);
     _coins += earned; _shiftCoins += earned; _served++;
@@ -89,24 +97,43 @@ const ChefController = (() => {
   });
 
   // ── Shift / day ──────────────────────────────────────────────────────────────
+  function _finishShift() {
+    _shiftActive = false; _paused = false;
+    window.CUSTOMER_MGR?.stopSpawning();
+    window.STAFF_MGR?.endShift();
+    window.dispatchEvent(new CustomEvent('dk:shiftEnded', { detail: { coins: _shiftCoins, total: _coins, served: _served, rep: _rep, day: _day } }));
+    _day++;
+  }
   function startShift(tier) {
     _kitchenTier = tier || _kitchenTier;
-    _shiftActive = true; _shiftCoins = 0; _served = 0; _tray = []; _refreshTray();
+    _shiftActive = true; _paused = false; _shiftCoins = 0; _served = 0; _tray = []; _refreshTray();
     window.STATION_MGR?.resetForNewShift();
     window.CUSTOMER_MGR?.startSpawning(_kitchenTier, _day);
     window.STAFF_MGR?.beginShift();
     const durationMs = (SHIFT_DURATIONS[_kitchenTier] || 70) * 1000;
+    _endTime = Date.now() + durationMs;
     window.dispatchEvent(new CustomEvent('dk:shiftStarted', { detail: { durationMs, day: _day, tier: _kitchenTier } }));
     if (_shiftTimer) clearTimeout(_shiftTimer);
-    _shiftTimer = window.setTimeout(() => {
-      _shiftActive = false;
-      window.CUSTOMER_MGR?.stopSpawning();
-      window.STAFF_MGR?.endShift();
-      window.dispatchEvent(new CustomEvent('dk:shiftEnded', { detail: { coins: _shiftCoins, total: _coins, served: _served, rep: _rep, day: _day } }));
-      _day++;
-    }, durationMs);
+    _shiftTimer = window.setTimeout(_finishShift, durationMs);
   }
   function endShift() { if (_shiftTimer) clearTimeout(_shiftTimer); _shiftActive = false; window.CUSTOMER_MGR?.stopSpawning(); }
+
+  // Pause/resume so the player can shop mid-shift without losing customers.
+  function pauseShift() {
+    if (!_shiftActive || _paused) return;
+    _paused = true; _remainingMs = Math.max(0, _endTime - Date.now());
+    if (_shiftTimer) clearTimeout(_shiftTimer);
+    window.CUSTOMER_MGR?.pause(); window.STAFF_MGR?.endShift();
+    window.dispatchEvent(new CustomEvent('dk:shiftPaused', { detail: { remainingMs: _remainingMs } }));
+  }
+  function resumeShift() {
+    if (!_shiftActive || !_paused) return;
+    _paused = false; _endTime = Date.now() + _remainingMs;
+    window.CUSTOMER_MGR?.resume(); window.STAFF_MGR?.beginShift();
+    if (_shiftTimer) clearTimeout(_shiftTimer);
+    _shiftTimer = window.setTimeout(_finishShift, _remainingMs);
+    window.dispatchEvent(new CustomEvent('dk:shiftResumed', { detail: { remainingMs: _remainingMs } }));
+  }
 
   window.addEventListener('dk:custWalkout', () => _setRep(_rep + REP_PER_WALKOUT));
 
@@ -153,7 +180,7 @@ const ChefController = (() => {
     }, 1400);
   });
 
-  return { startShift, endShift, deliverDish, getCoins, setCoins, getTier, getRep, getDay,
+  return { startShift, endShift, pauseShift, resumeShift, deliverDish, getCoins, setCoins, getTier, getRep, getDay,
     setKitchenTier, upgradeChefSpeed, upgradeTraySize, hireCook, hireWaiter, getStaff, countStaff };
 })();
 

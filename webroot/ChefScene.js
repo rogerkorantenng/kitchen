@@ -179,6 +179,30 @@ class ChefScene extends Phaser.Scene {
     }
   }
 
+  // ─── Flying plated dish (the "serve" animation) ──────────────────────────────
+  flyDish(fromX, fromY, toX, toY, emoji, cb) {
+    const plate = this.add.graphics().setDepth(3500).setPosition(fromX, fromY);
+    plate.fillStyle(0x000000, 0.15); plate.fillEllipse(0, 4, 34, 12);
+    plate.fillStyle(0xffffff, 1); plate.fillEllipse(0, 0, 32, 12);
+    plate.fillStyle(0xe6ebf0, 1); plate.fillEllipse(0, -1, 22, 8);
+    const food = this.add.text(fromX, fromY - 7, emoji, { fontSize: '22px' }).setOrigin(0.5).setDepth(3501);
+    const midX = (fromX + toX) / 2, midY = Math.min(fromY, toY) - 80;
+    const ctrl = { t: 0 };
+    this.tweens.add({
+      targets: ctrl, t: 1, duration: 440, ease: 'Sine.InOut',
+      onUpdate: () => {
+        const t = ctrl.t, it = 1 - t;
+        const x = it*it*fromX + 2*it*t*midX + t*t*toX;
+        const y = it*it*fromY + 2*it*t*midY + t*t*toY;
+        plate.setPosition(x, y); food.setPosition(x, y - 7).setRotation(Math.sin(t * Math.PI) * 0.3);
+      },
+      onComplete: () => {
+        this.tweens.add({ targets: [plate, food], scaleX: 1.3, scaleY: 1.3, alpha: 0, duration: 220,
+          onComplete: () => { plate.destroy(); food.destroy(); if (cb) cb(); } });
+      },
+    });
+  }
+
   // ─── Float text ──────────────────────────────────────────────────────────────
   showFloatText(x, y, text, color = '#ffffff', size = 14) {
     const t = this.add.text(x, y, text, {

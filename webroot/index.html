@@ -39,7 +39,16 @@
     }
     .hud-timer-low { color:#ef4444 !important; animation:pulse 0.8s ease-in-out infinite; }
     @keyframes pulse { 50% { opacity:0.55; } }
-    .hud-right { flex:1; display:flex; flex-direction:column; align-items:flex-end; gap:3px; }
+    .hud-right { flex:1; display:flex; flex-direction:row; align-items:center; justify-content:flex-end; gap:8px; }
+    .hud-rc { display:flex; flex-direction:column; align-items:flex-end; gap:3px; }
+    .hud-shop {
+      pointer-events:auto; cursor:pointer; flex-shrink:0;
+      width:40px; height:40px; border-radius:12px; font-size:20px;
+      background:linear-gradient(135deg,#fb923c,#f97316); border:2px solid rgba(255,255,255,0.5);
+      box-shadow:0 3px 10px rgba(249,115,22,0.45); display:flex; align-items:center; justify-content:center;
+      transition:transform 0.08s;
+    }
+    .hud-shop:active { transform:scale(0.9); }
     .hud-rep { font-size:10px; letter-spacing:1px; }
     .hud-coins {
       display:flex; align-items:center; gap:4px;
@@ -160,6 +169,7 @@
   <script src="rpc.js"></script>
   <script src="constants.js"></script>
   <script src="InputManager.js"></script>
+  <script src="Characters.js"></script>
   <script src="ChefScene.js"></script>
   <script src="StationManager.js"></script>
   <script src="CustomerManager.js"></script>
