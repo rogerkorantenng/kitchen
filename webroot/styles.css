@@ -1,0 +1,414 @@
+/* Drift Kitchen — Full Game Styles */
+/* Visual identity: Studio Ghibli night-market — deep indigo, warm lantern orange */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:          #0d1117;
+  --surface:     #161b22;
+  --surface2:    #21262d;
+  --border:      #30363d;
+  --orange:      #f97316;
+  --orange-dim:  #7c3a1e;
+  --gold:        #fbbf24;
+  --green:       #22c55e;
+  --blue:        #38bdf8;
+  --purple:      #818cf8;
+  --red:         #ef4444;
+  --muted:       #8b949e;
+  --text:        #e6edf3;
+  --craze:       #ef4444;
+}
+
+html, body {
+  height: 100%; overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+/* ── Utilities ─────────────────────────────────────────────────────────────── */
+.hidden { display: none !important; }
+
+/* ── Splash ─────────────────────────────────────────────────────────────────── */
+#splash {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  background: var(--bg); z-index: 100;
+}
+.splash-title {
+  font-size: 2rem; font-weight: 900;
+  color: var(--orange); letter-spacing: 3px;
+}
+.splash-sub { margin-top: 8px; color: var(--muted); font-size: 0.85rem; }
+.splash-spinner {
+  margin-top: 28px; width: 28px; height: 28px;
+  border: 3px solid var(--border); border-top-color: var(--orange);
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Game container ─────────────────────────────────────────────────────────── */
+#game {
+  display: none; flex-direction: column;
+  height: 100%; width: 100%;
+  overflow: hidden;
+}
+
+/* ── Top bar — slim ─────────────────────────────────────────────────────────── */
+.top-bar {
+  display: flex; align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  background: rgba(22,27,34,0.95);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  gap: 6px;
+  z-index: 10;
+}
+.top-left { min-width: 0; }
+.game-title {
+  font-size: 0.8rem; font-weight: 900;
+  color: var(--orange); letter-spacing: 1px;
+}
+.username-tag {
+  font-size: 0.65rem; color: var(--muted);
+  display: flex; align-items: center; gap: 3px;
+}
+.streak-badge {
+  background: rgba(249,115,22,0.15);
+  border: 1px solid var(--orange-dim);
+  border-radius: 20px; padding: 1px 5px;
+  font-size: 0.6rem; color: var(--orange);
+}
+.top-currencies {
+  display: flex; align-items: center; gap: 5px; flex-shrink: 0;
+}
+.currency-chip {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 20px; padding: 2px 7px;
+  font-size: 0.75rem; font-weight: 700; color: var(--gold);
+  white-space: nowrap;
+}
+.currency-chip.renown { color: var(--purple); }
+.currency-chip.token  { color: var(--blue); }
+
+/* ── Prestige bar — very thin ────────────────────────────────────────────────── */
+.prestige-bar-wrap {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 10px;
+  background: rgba(22,27,34,0.9);
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.prestige-bar {
+  flex: 1; height: 3px; background: var(--border);
+  border-radius: 2px; overflow: hidden;
+}
+.prestige-bar-fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--purple), var(--orange));
+  border-radius: 2px; transition: width 0.5s ease;
+}
+.prestige-bar-label {
+  font-size: 0.6rem; color: var(--muted); white-space: nowrap;
+}
+
+/* ── Harbor banner — compact ─────────────────────────────────────────────────── */
+.harbor-banner {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px;
+  background: rgba(22,27,34,0.9);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0; overflow-x: auto;
+  z-index: 10;
+}
+.harbor-banner::-webkit-scrollbar { display: none; }
+.harbor-left {
+  display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+}
+.harbor-anchor { font-size: 0.8rem; }
+.harbor-name { font-size: 0.8rem; font-weight: 700; color: var(--text); }
+.btn-reroll {
+  background: none; border: none; cursor: pointer;
+  font-size: 0.8rem; padding: 1px 3px; opacity: 0.6;
+  transition: opacity 0.15s;
+}
+.btn-reroll:hover { opacity: 1; }
+.craving-list {
+  display: flex; gap: 4px; list-style: none; flex-wrap: nowrap;
+}
+.craving-item {
+  display: flex; align-items: center; gap: 2px;
+  background: rgba(33,38,45,0.9);
+  border: 1px solid var(--border);
+  border-radius: 20px; padding: 2px 7px;
+  font-size: 0.65rem; white-space: nowrap; flex-shrink: 0;
+}
+.craving-item.craze {
+  background: rgba(239,68,68,0.15); border-color: var(--craze);
+}
+.craving-label { color: var(--text); }
+.craving-mult  { color: var(--gold); font-weight: 700; }
+
+/* ── Kitchen scene — fills ALL remaining space ──────────────────────────────── */
+.kitchen-scene {
+  flex: 1; min-height: 0;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(180deg, #0d1117 0%, #111827 100%);
+}
+
+/* Phaser canvas fills the entire kitchen area as background */
+#phaser-mount {
+  position: absolute; inset: 0; z-index: 0;
+}
+#phaser-mount canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Station grid overlays Phaser — transparent background so Phaser shows through */
+.station-grid {
+  position: absolute; inset: 0; z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  padding: 8px;
+  overflow-y: auto;
+  /* Transparent so Phaser scene is visible underneath */
+  pointer-events: none; /* pass through to Phaser for non-card areas */
+}
+.station-grid::-webkit-scrollbar { display: none; }
+
+/* Empty state centered */
+.empty-kitchen {
+  grid-column: 1 / -1;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 30px 20px; color: var(--muted);
+  pointer-events: none;
+}
+
+/* ── Station card — glassmorphism over Phaser ───────────────────────────────── */
+.station-card {
+  background: rgba(22,27,34,0.88);
+  border: 1px solid rgba(48,54,61,0.8);
+  border-radius: 12px; padding: 10px;
+  display: flex; flex-direction: column; gap: 6px;
+  transition: border-color 0.2s;
+  position: relative;
+  pointer-events: all; /* re-enable for cards */
+  backdrop-filter: blur(4px);
+}
+.station-card:hover { border-color: rgba(249,115,22,0.4); }
+.station-header {
+  display: flex; align-items: center; gap: 5px;
+}
+.station-emoji { font-size: 1.3rem; }
+.station-name  { font-size: 0.72rem; font-weight: 700; flex: 1; }
+.craving-badge {
+  font-size: 0.6rem; font-weight: 700;
+  background: rgba(251,191,36,0.15); border: 1px solid rgba(251,191,36,0.3);
+  border-radius: 20px; padding: 1px 4px; color: var(--gold);
+}
+.station-stats {
+  display: flex; justify-content: space-between;
+  font-size: 0.65rem; color: var(--muted);
+}
+.cook-progress {
+  height: 3px; background: var(--border);
+  border-radius: 2px; overflow: hidden;
+}
+.cook-progress.hidden { display: none; }
+.cook-progress-fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--orange), var(--gold));
+  border-radius: 2px;
+}
+.station-actions {
+  display: flex; gap: 4px; flex-wrap: wrap;
+}
+.btn-cook-tap, .btn-upgrade, .btn-hire {
+  flex: 1; min-width: 0;
+  padding: 5px 3px; border: none; border-radius: 7px;
+  font-size: 0.65rem; font-weight: 700; cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  text-align: center; line-height: 1.3;
+}
+.btn-cook-tap {
+  background: var(--orange); color: white;
+}
+.btn-cook-tap:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+.btn-upgrade {
+  background: rgba(33,38,45,0.9); color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-upgrade:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-upgrade:not(:disabled):hover { border-color: var(--orange); }
+.btn-hire {
+  background: rgba(34,197,94,0.15);
+  border: 1px solid rgba(34,197,94,0.3);
+  color: var(--green);
+}
+.btn-hire:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-cook-tap:active:not(:disabled),
+.btn-upgrade:active:not(:disabled),
+.btn-hire:active:not(:disabled) { transform: scale(0.95); }
+
+/* ── Coin pop ───────────────────────────────────────────────────────────────── */
+.coin-pop {
+  position: absolute;
+  font-size: 0.85rem; font-weight: 800; color: var(--gold);
+  pointer-events: none;
+  animation: coinFloat 0.9s ease-out forwards;
+  z-index: 20; transform: translateX(-50%);
+}
+@keyframes coinFloat {
+  0%   { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-55px); }
+}
+
+/* ── Bottom sheet — tab bar + panels ───────────────────────────────────────── */
+.bottom-sheet {
+  flex-shrink: 0;
+  background: rgba(22,27,34,0.97);
+  border-top: 1px solid var(--border);
+  z-index: 10;
+}
+
+.tab-bar {
+  display: flex;
+}
+.tab-btn {
+  flex: 1; background: none; border: none;
+  padding: 8px 4px; font-size: 0.65rem; color: var(--muted);
+  cursor: pointer; transition: color 0.15s;
+  border-top: 2px solid transparent;
+}
+.tab-btn.active {
+  color: var(--orange); border-top-color: var(--orange);
+}
+.tab-btn:hover:not(.active) { color: var(--text); }
+
+/* Tab panels — collapsed by default, expand on tap */
+.tab-panels {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.25s ease;
+}
+.tab-panels.open {
+  max-height: 220px;
+  overflow-y: auto;
+}
+.tab-panels::-webkit-scrollbar { display: none; }
+
+.tab-panel { padding: 8px 10px; }
+.panel-header {
+  font-size: 0.6rem; font-weight: 600;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 6px;
+}
+
+/* ── Shop ───────────────────────────────────────────────────────────────────── */
+.shop-list { display: flex; flex-direction: column; gap: 6px; }
+.shop-item {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 7px 9px;
+}
+.shop-emoji { font-size: 1.2rem; flex-shrink: 0; }
+.shop-info { flex: 1; min-width: 0; }
+.shop-name { font-size: 0.75rem; font-weight: 700; }
+.shop-sub  { font-size: 0.6rem; color: var(--muted); }
+.btn-buy-station {
+  background: var(--orange); color: white;
+  border: none; border-radius: 7px;
+  padding: 5px 9px; font-size: 0.7rem; font-weight: 700;
+  cursor: pointer; white-space: nowrap; flex-shrink: 0;
+}
+.btn-buy-station:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+
+/* ── Voyage tab ─────────────────────────────────────────────────────────────── */
+.voyage-info { font-size: 0.75rem; color: var(--muted); margin-bottom: 10px; line-height: 1.4; }
+.btn-voyage-big {
+  width: 100%; padding: 10px;
+  background: linear-gradient(135deg, #312e81, #4338ca);
+  color: white; border: none; border-radius: 10px;
+  font-size: 0.9rem; font-weight: 700; cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-voyage-big:disabled { opacity: 0.3; cursor: not-allowed; }
+.btn-voyage-big:not(:disabled):hover { opacity: 0.85; }
+
+/* ── Info tab ───────────────────────────────────────────────────────────────── */
+.info-grid { display: flex; flex-direction: column; gap: 3px; }
+.info-row {
+  display: flex; justify-content: space-between;
+  font-size: 0.75rem; padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+.info-row span:last-child { color: var(--gold); font-weight: 600; }
+.spike-status { font-size: 0.7rem; padding: 3px 0; }
+
+/* ── Modals ─────────────────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.8);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 50; padding: 16px;
+}
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px; padding: 20px;
+  width: 100%; max-width: 300px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.modal-title {
+  font-size: 1rem; font-weight: 800; text-align: center;
+  color: var(--text);
+}
+.modal-body { text-align: center; font-size: 0.8rem; color: var(--muted); }
+.modal-warn { color: var(--red); font-size: 0.7rem; margin-top: 6px; }
+.offline-amount {
+  font-size: 1.8rem; font-weight: 900; color: var(--gold);
+  margin: 6px 0;
+}
+.offline-sub { font-size: 0.75rem; color: var(--muted); }
+.modal-btns { display: flex; gap: 7px; }
+.btn-modal-primary {
+  flex: 1; padding: 11px;
+  background: var(--orange); color: white;
+  border: none; border-radius: 9px;
+  font-size: 0.85rem; font-weight: 700; cursor: pointer;
+}
+.btn-modal-primary:hover { background: #ea6810; }
+.btn-modal-secondary {
+  flex: 1; padding: 11px;
+  background: var(--surface2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 9px;
+  font-size: 0.85rem; font-weight: 700; cursor: pointer;
+}
+.btn-modal-secondary:hover { border-color: var(--orange); }
+
+/* ── Notification toast ─────────────────────────────────────────────────────── */
+#notification {
+  position: fixed; bottom: 55px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.72rem; font-weight: 600;
+  opacity: 0; transition: opacity 0.3s;
+  pointer-events: none;
+  padding: 4px 12px;
+  background: rgba(13,17,23,0.95);
+  border: 1px solid var(--border); border-radius: 20px;
+  white-space: nowrap; z-index: 60;
+}
+
+/* ── Scrollbars ─────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 2px; height: 2px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }

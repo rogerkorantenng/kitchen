@@ -1,0 +1,8 @@
+name: drift-kitchen
+version: 0.0.1
+api: '0.12'
+developers:
+  - Beneficial-Effort819
+webRoot: ./webroot
+redis:
+  enabled: true
