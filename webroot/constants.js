@@ -135,9 +135,9 @@ const COMBOS = {
 
 // ─── Customer types ───────────────────────────────────────────────────────────
 const CUSTOMER_PATIENCE = {
-  regular:   18000,
-  impatient: 11000,
-  vip:       24000,
+  regular:   32000,
+  impatient: 22000,
+  vip:       45000,
 };
 // Pay multiplier per customer type (VIP tips bigger)
 const CUSTOMER_PAY_MULT = { regular: 1, impatient: 1.15, vip: 1.6 };
@@ -147,7 +147,7 @@ const MAX_WAITING = 5;
 
 // ─── Shift / day progression ──────────────────────────────────────────────────
 // Shift length grows slightly with tier; difficulty scales by day.
-const SHIFT_DURATIONS = [0, 70, 80, 80, 90, 95]; // seconds, indexed by tier
+const SHIFT_DURATIONS = [0, 130, 145, 160, 175, 190]; // seconds, indexed by tier
 
 // ─── Chef / movement ──────────────────────────────────────────────────────────
 const CHEF_SPEED_PX_S = 235;  // world px per second

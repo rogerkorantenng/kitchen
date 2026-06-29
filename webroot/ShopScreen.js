@@ -24,6 +24,7 @@ const ShopScreen = (() => {
     const el = document.getElementById('shop-overlay');
     if (!el) return;
     el.style.display = 'block';
+    _wireOverlay();
     _render(el);
   }
   // Open mid-shift (pauses the shift); purchases take effect immediately.
@@ -34,10 +35,33 @@ const ShopScreen = (() => {
     _day = ctrl.getDay(); _rep = ctrl.getRep(); _tier = ctrl.getTier();
     const el = document.getElementById('shop-overlay'); if (!el) return;
     el.style.display = 'block';
+    _wireOverlay();
     _render(el);
     ctrl.pauseShift();
   }
   function hide() { const el = document.getElementById('shop-overlay'); if (el) el.style.display = 'none'; }
+
+  // Delegated click handler — Devvit webview CSP blocks inline onclick, so all
+  // buttons use data-act and we bind one listener here.
+  function _wireOverlay() {
+    const el = document.getElementById('shop-overlay');
+    if (!el || el._dkWired) return;
+    el._dkWired = true;
+    const onTap = (ev) => {
+      const btn = ev.target.closest('[data-act]'); if (!btn) return;
+      if (btn.classList.contains('off') || btn.disabled) return;
+      ev.preventDefault();
+      const act = btn.dataset.act;
+      if (act === 'upgst') window._shopUpgSt(btn.dataset.id);
+      else if (act === 'upgchef') window._shopUpgChef(btn.dataset.key);
+      else if (act === 'hirecook') window._shopHireCook(btn.dataset.id);
+      else if (act === 'hirewaiter') window._shopHireWaiter();
+      else if (act === 'expand') window._shopExpand();
+      else if (act === 'next') window._shopNext();
+      else if (act === 'resume') window._shopResume();
+    };
+    el.addEventListener('click', onTap);
+  }
 
   function _section(title) {
     return `<div class="shop-sec-title"><span></span>${title}<span></span></div>`;
@@ -82,8 +106,8 @@ const ShopScreen = (() => {
 
         <div class="shop-foot">
           ${_mode === 'shift'
-            ? `<button onclick="window._shopResume()" class="shop-next">▶ Resume Cooking</button>`
-            : `<button onclick="window._shopNext()" class="shop-next">▶ Open for Day ${_day + 1}</button>`}
+            ? `<button data-act="resume" class="shop-next">▶ Resume Cooking</button>`
+            : `<button data-act="next" class="shop-next">▶ Open for Day ${_day + 1}</button>`}
         </div>
       </div>`;
   }
@@ -102,7 +126,7 @@ const ShopScreen = (() => {
         <div class="shop-desc orange">Next: ${next}</div>
         <div class="shop-pips">${[0,1,2].map(i=>`<i class="${i<st.level?'on':''}"></i>`).join('')}</div>
       </div>
-      <button onclick="window._shopUpgSt('${st.id}')" class="shop-buy ${can?'':'off'}" ${can?'':'disabled'}>
+      <button data-act="upgst" data-id="${st.id}" class="shop-buy ${can?'':'off'}" ${can?'':'disabled'}>
         ${maxed ? '✓ MAX' : '🪙 '+_fmt(cost)}</button>
     </div>`;
   }
@@ -119,7 +143,7 @@ const ShopScreen = (() => {
         <div class="shop-desc green">${def.desc}</div>
         <div class="shop-pips">${Array.from({length:def.maxLevel},(_,i)=>`<i class="${i<lvl?'on green':''}"></i>`).join('')}</div>
       </div>
-      <button onclick="window._shopUpgChef('${key}')" class="shop-buy green ${can?'':'off'}" ${can?'':'disabled'}>
+      <button data-act="upgchef" data-key="${key}" class="shop-buy green ${can?'':'off'}" ${can?'':'disabled'}>
         ${maxed ? '✓ MAX' : '🪙 '+_fmt(cost)}</button>
     </div>`;
   }
@@ -144,7 +168,7 @@ const ShopScreen = (() => {
           <div class="shop-desc blue">${hired ? '✓ Auto-cooking this station' : 'Keeps this station cooking'}</div>
         </div>
         ${hired ? '<button class="shop-buy off" disabled>✓ HIRED</button>'
-          : `<button onclick="window._shopHireCook('${st.id}')" class="shop-buy blue ${can?'':'off'}" ${can?'':'disabled'}>🪙 ${_fmt(cost)}</button>`}
+          : `<button data-act="hirecook" data-id="${st.id}" class="shop-buy blue ${can?'':'off'}" ${can?'':'disabled'}>🪙 ${_fmt(cost)}</button>`}
       </div>`;
     });
     // waiters (auto-serve)
@@ -156,7 +180,7 @@ const ShopScreen = (() => {
         <div class="shop-name">Waiter ${waiterCount ? '×'+waiterCount : ''}</div>
         <div class="shop-desc blue">${STAFF.waiter.desc} — delivers ready dishes</div>
       </div>
-      <button onclick="window._shopHireWaiter()" class="shop-buy blue ${wcan?'':'off'}" ${wcan?'':'disabled'}>🪙 ${_fmt(wcost)}</button>
+      <button data-act="hirewaiter" class="shop-buy blue ${wcan?'':'off'}" ${wcan?'':'disabled'}>🪙 ${_fmt(wcost)}</button>
     </div>`;
     return html;
   }
@@ -176,7 +200,7 @@ const ShopScreen = (() => {
           ${!can ? `<div class="shop-bar"><div style="width:${Math.round(pct*100)}%"></div></div>
             <div class="shop-desc">🪙 ${_fmt(_coins)} / ${_fmt(td.unlockCost)}</div>` : ''}
         </div>
-        <button onclick="window._shopExpand()" class="shop-buy ${can?'':'off'}" ${can?'':'disabled'}>
+        <button data-act="expand" class="shop-buy ${can?'':'off'}" ${can?'':'disabled'}>
           ${can ? '🔓 Expand' : '🪙 '+_fmt(td.unlockCost)}</button>
       </div>`;
   }

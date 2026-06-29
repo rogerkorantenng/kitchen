@@ -161,6 +161,15 @@ const StationManager = (() => {
     [0xff6b6b, 0xffd93d, 0x6bcb77].forEach((c, i) => { g.fillStyle(c, 1); g.fillCircle(L + w*0.22 + i*w*0.1, cy + h*0.34, w*0.028); });
   }
 
+  // round sesame burger bun (used for the Buns bin so it doesn't look like a loaf)
+  function _drawBun(g, cx, cy, r) {
+    g.fillStyle(0xc98a4e, 1); g.fillEllipse(cx, cy + r*0.5, r*2.1, r*0.7);
+    g.fillStyle(0xe3a85f, 1); g.fillEllipse(cx, cy + r*0.05, r*2.0, r*1.25);
+    g.fillStyle(0xf0c887, 1); g.fillEllipse(cx, cy - r*0.12, r*1.6, r*0.85);
+    g.fillStyle(0xfff3da, 1);
+    [[-0.45,-0.05],[0.05,-0.35],[0.5,0.0],[-0.1,0.12],[0.32,0.18]].forEach(([dx, dy]) => g.fillEllipse(cx + dx*r, cy + dy*r, r*0.22, r*0.13));
+  }
+
   function _drawPips(inst) {
     const g = inst.objs.pips; if (!g) return; g.clear();
     if (inst.kind !== 'cook' && inst.kind !== 'maker') return;
@@ -176,7 +185,14 @@ const StationManager = (() => {
     if (o.burn) { o.burn.clear(); o.burn.setVisible(false); }
     _drawPips(inst);
     if (inst.kind === 'bin') {
-      o.item.setText(inst.def.emoji).setVisible(true).setY(inst._cy - inst._h*0.18);
+      if (inst.defId === 'buns') {
+        o.item.setVisible(false);
+        const sc = _scene();
+        if (sc) { if (!o.icon) o.icon = sc.add.graphics().setDepth(24); o.icon.clear(); _drawBun(o.icon, inst._cx, inst._cy - inst._h*0.16, inst._w*0.24); }
+      } else {
+        if (o.icon) o.icon.clear();
+        o.item.setText(inst.def.emoji).setVisible(true).setY(inst._cy - inst._h*0.18);
+      }
     } else if (inst.kind === 'plate') {
       if (inst.dish) { o.item.setText(ITEMS[inst.dish].emoji).setVisible(true); o.hint.setStroke('#16a34a', 3).setText('TAKE ✓').setVisible(true); }
       else if (inst.contents.length) o.item.setText(inst.contents.map(c => ITEMS[c].emoji).join('')).setVisible(true);
@@ -308,7 +324,7 @@ const StationManager = (() => {
   // ── Public model API ─────────────────────────────────────────────────────────
   function getStations() { return _list; }
   function stationAt(x, y) {
-    return _list.find(i => Math.abs(x - i._cx) <= i._w*0.6 && Math.abs(y - i._cy) <= i._h*0.75) || null;
+    return _list.find(i => Math.abs(x - i._cx) <= i._w*0.52 && Math.abs(y - i._cy) <= i._h*0.6) || null;
   }
 
   function startCook(inst, item) {

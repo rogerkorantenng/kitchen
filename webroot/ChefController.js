@@ -81,7 +81,18 @@ const ChefController = (() => {
 
   function _onDown(p) {
     const scene = window.CHEF_SCENE, stMgr = window.STATION_MGR;
+    // tap your hands (the bottom tray) to drop / discard whatever you're holding
+    const hb = scene.handCenter ? scene.handCenter() : null;
+    if (_hand && hb && Math.abs(p.x - hb.cx) <= hb.w / 2 && Math.abs(p.y - hb.cy) <= scene.H * 0.05) {
+      _setHand(null); window.SFX?.place(); _dragging = false; return;
+    }
     const t = _hit(p.x, p.y);
+    // bins ALWAYS hand you their ingredient — swapping out whatever you were holding
+    if (t && t.kind === 'station' && t.inst.kind === 'bin') {
+      _setHand(t.inst.def.gives); _dragging = true;
+      scene.showGhost(ITEMS[_hand].emoji); scene.moveGhost(p.x, p.y); window.SFX?.pickup();
+      return;
+    }
     if (_hand == null && t && t.kind === 'station') {
       const item = stMgr.takeFrom(t.inst);
       if (item) { _setHand(item); _dragging = true; scene.showGhost(ITEMS[item].emoji); scene.moveGhost(p.x, p.y); window.SFX?.pickup(); }
