@@ -168,12 +168,95 @@
       border:none; border-radius:16px; font-size:17px; font-weight:900; cursor:pointer;
       box-shadow:0 4px 20px rgba(249,115,22,0.5); border-bottom:3px solid rgba(0,0,0,0.2); letter-spacing:0.5px;
     }
+
+    /* ── Start menu overlay ────────────────────────────────────────────────── */
+    #menu-overlay { position:fixed; inset:0; z-index:300; display:none; }
+    .menu-root {
+      position:absolute; inset:0; display:flex; flex-direction:column; align-items:center;
+      justify-content:center; gap:14px; padding:26px 22px calc(26px + env(safe-area-inset-bottom,0px));
+      overflow-y:auto;
+      background:
+        radial-gradient(120% 80% at 50% -10%, rgba(251,146,60,0.42), transparent 60%),
+        linear-gradient(180deg,#6b4423 0%, #4a2e16 60%, #3a230f 100%);
+    }
+    .menu-logo {
+      width:96px; height:96px; border-radius:28px; display:flex; align-items:center; justify-content:center;
+      font-size:54px; background:radial-gradient(circle at 38% 32%,#ffb866,#f97316 60%,#c2410c);
+      box-shadow:0 10px 34px rgba(249,115,22,0.55), inset 0 3px 6px rgba(255,255,255,0.35);
+      border:3px solid rgba(255,255,255,0.45); animation:menuFloat 3s ease-in-out infinite;
+    }
+    @keyframes menuFloat { 50% { transform:translateY(-8px); } }
+    .menu-title { font-size:38px; font-weight:900; color:#fff; letter-spacing:1px; text-align:center;
+      text-shadow:0 3px 14px rgba(249,115,22,0.6), 0 2px 2px rgba(0,0,0,0.4); line-height:1; }
+    .menu-title .accent { color:#fbbf24; }
+    .menu-sub { font-size:13px; font-weight:700; color:#f0c98a; opacity:0.9; margin-top:-4px; text-align:center; }
+    .menu-btns { display:flex; flex-direction:column; gap:12px; width:100%; max-width:320px; margin-top:6px; }
+    .menu-btn {
+      width:100%; padding:16px 18px; border:none; border-radius:18px; cursor:pointer;
+      font-size:18px; font-weight:900; letter-spacing:0.5px; color:#fff;
+      display:flex; align-items:center; gap:12px; transition:transform 0.08s;
+      box-shadow:0 5px 18px rgba(0,0,0,0.32); border-bottom:3px solid rgba(0,0,0,0.22);
+    }
+    .menu-btn:active { transform:scale(0.96); }
+    .menu-btn .mb-ico { font-size:24px; width:30px; text-align:center; }
+    .menu-btn.play { background:linear-gradient(135deg,#fb923c,#e55c00); font-size:21px; padding:19px 18px;
+      box-shadow:0 6px 22px rgba(249,115,22,0.55); }
+    .menu-btn.lb   { background:linear-gradient(135deg,#fbbf24,#d99413); color:#4a2e16; text-shadow:none; }
+    .menu-btn.htp  { background:linear-gradient(135deg,#5b7cc4,#3f5896); }
+    .menu-foot { font-size:10px; color:rgba(240,201,138,0.55); font-weight:700; margin-top:4px; }
+
+    /* sub-panels (leaderboard / how to play) */
+    .menu-panel {
+      width:100%; max-width:380px; background:linear-gradient(180deg,#fff6e7,#f6e6cb);
+      border-radius:20px; box-shadow:0 14px 44px rgba(0,0,0,0.4); overflow:hidden;
+      display:flex; flex-direction:column; max-height:86vh;
+    }
+    .menu-panel-head {
+      background:linear-gradient(180deg,#5c3a1e,#4a2e16); padding:16px 18px; text-align:center; position:relative;
+      border-bottom:3px solid #f97316;
+    }
+    .menu-panel-title { font-size:20px; font-weight:900; color:#f97316; }
+    .menu-panel-close {
+      position:absolute; top:10px; right:12px; width:32px; height:32px; border-radius:10px; border:none; cursor:pointer;
+      background:rgba(255,255,255,0.16); color:#fff; font-size:18px; font-weight:900;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .menu-panel-body { padding:14px 16px 18px; overflow-y:auto; }
+    .menu-panel-foot { padding:12px 16px calc(14px + env(safe-area-inset-bottom,0px)); }
+
+    .lb-row {
+      display:flex; align-items:center; gap:11px; padding:10px 12px; margin-bottom:7px; border-radius:13px;
+      background:linear-gradient(135deg,#fffaf2,#fff3df); border:1.5px solid #e7d2ad;
+    }
+    .lb-row.me { border-color:#f97316; box-shadow:0 3px 12px rgba(249,115,22,0.18); background:linear-gradient(135deg,#fff1de,#ffe7c4); }
+    .lb-rank { width:30px; height:30px; flex-shrink:0; border-radius:9px; display:flex; align-items:center; justify-content:center;
+      font-size:13px; font-weight:900; color:#8b5e3c; background:rgba(249,115,22,0.12); }
+    .lb-rank.gold   { background:linear-gradient(135deg,#fde68a,#f59e0b); color:#5c3a1e; }
+    .lb-rank.silver { background:linear-gradient(135deg,#e5e7eb,#9ca3af); color:#374151; }
+    .lb-rank.bronze { background:linear-gradient(135deg,#fcd9b6,#c2792e); color:#fff; }
+    .lb-name { flex:1; min-width:0; font-size:14px; font-weight:800; color:#3a230f; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .lb-name .you { font-size:10px; color:#f97316; font-weight:900; margin-left:5px; }
+    .lb-score { font-size:14px; font-weight:900; color:#d97706; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .lb-empty { text-align:center; color:#8b5e3c; font-size:13px; padding:26px 10px; line-height:1.6; }
+    .lb-loading { text-align:center; color:#8b5e3c; font-size:13px; padding:26px 10px; }
+
+    .htp-step { display:flex; gap:12px; align-items:flex-start; margin-bottom:13px; }
+    .htp-num { width:30px; height:30px; flex-shrink:0; border-radius:50%; background:linear-gradient(135deg,#fb923c,#f97316);
+      color:#fff; font-size:14px; font-weight:900; display:flex; align-items:center; justify-content:center;
+      box-shadow:0 2px 7px rgba(249,115,22,0.4); }
+    .htp-txt { flex:1; }
+    .htp-txt b { font-size:14px; color:#3a230f; }
+    .htp-txt p { font-size:12px; color:#7a5436; margin-top:2px; line-height:1.5; }
+    .htp-tip { margin-top:6px; padding:11px 13px; border-radius:12px; font-size:12px; line-height:1.55; color:#7a5436;
+      background:rgba(249,115,22,0.08); border:1px solid rgba(249,115,22,0.22); }
+    .htp-tip b { color:#c2410c; }
   </style>
 </head>
 <body>
   <div id="game-mount"></div>
   <div id="hud-overlay"></div>
   <div id="shop-overlay"></div>
+  <div id="menu-overlay"></div>
 
   <script src="phaser.min.js"></script>
   <script src="rpc.js"></script>
@@ -190,6 +273,7 @@
   <script src="KitchenExpander.js"></script>
   <script src="HUD.js"></script>
   <script src="ShopScreen.js"></script>
+  <script src="MenuScreen.js"></script>
   <script src="ParticleEffects.js"></script>
   <script src="main.js"></script>
 </body>

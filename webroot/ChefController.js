@@ -14,6 +14,20 @@ const ChefController = (() => {
   let _cravings = [];
   let _staff = [];
   let _chefSpeedLevel = 0;
+  let _playPressed = false, _pendingStart = null;
+
+  // The game now boots into a start menu. Setup (kitchen rebuild, coin/staff
+  // hydrate) runs as soon as the server/dev-fallback is ready, but the first
+  // shift only begins when the player taps "Play" on the menu.
+  function _armStart(starter) {
+    if (_playPressed) starter();
+    else _pendingStart = starter;
+  }
+  function beginGame() {
+    _playPressed = true;
+    const f = _pendingStart; _pendingStart = null;
+    if (f) f();
+  }
 
   const _DISH_CRAVE = { burger: 'grilled', fries: 'street', cola: 'sweet', coffee: 'comfort' };
   function _cravingMult(dish) {
@@ -241,7 +255,7 @@ const ChefController = (() => {
         window.STATION_MGR.restoreLevels?.(st.stations);   // restore upgrade levels
         window.CHEF_SCENE.rebuildKitchen?.(_kitchenTier);  // rebuild to saved tier (re-inits stations w/ levels)
         window.STAFF_MGR?.restore(_staff); _syncCookBadges();
-        startShift(_kitchenTier);
+        _armStart(() => startShift(_kitchenTier));
       }
     }, 500);
   });
@@ -250,11 +264,11 @@ const ChefController = (() => {
   // Dev fallback (local Playwright / standalone — no Devvit server)
   window.addEventListener('dk:sceneReady', () => {
     window.setTimeout(() => {
-      if (!window._dkInitDone) { _coins = 80; _updateCoins(); window.STAFF_MGR?.restore(_staff); _syncCookBadges(); startShift(1); }
+      if (!window._dkInitDone) { _coins = 80; _updateCoins(); window.STAFF_MGR?.restore(_staff); _syncCookBadges(); _armStart(() => startShift(1)); }
     }, 1400);
   });
 
-  return { startShift, endShift, pauseShift, resumeShift, deliverDish, getCoins, setCoins, getTier, getRep, getDay,
+  return { startShift, beginGame, endShift, pauseShift, resumeShift, deliverDish, getCoins, setCoins, getTier, getRep, getDay,
     setKitchenTier, upgradeChefSpeed, upgradeTraySize, hireCook, hireWaiter, getStaff, countStaff };
 })();
 
