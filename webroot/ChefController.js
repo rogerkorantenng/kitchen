@@ -13,6 +13,21 @@ const ChefController = (() => {
   let _endTime = 0, _remainingMs = 0;
   let _cravings = [];
   let _staff = [];
+  let _chefSpeedLevel = 0;
+  let _playPressed = false, _pendingStart = null;
+
+  // The game now boots into a start menu. Setup (kitchen rebuild, coin/staff
+  // hydrate) runs as soon as the server/dev-fallback is ready, but the first
+  // shift only begins when the player taps "Play" on the menu.
+  function _armStart(starter) {
+    if (_playPressed) starter();
+    else _pendingStart = starter;
+  }
+  function beginGame() {
+    _playPressed = true;
+    const f = _pendingStart; _pendingStart = null;
+    if (f) f();
+  }
 
   const _DISH_CRAVE = { burger: 'grilled', fries: 'street', cola: 'sweet', coffee: 'comfort' };
   function _cravingMult(dish) {
@@ -81,11 +96,22 @@ const ChefController = (() => {
 
   function _onDown(p) {
     const scene = window.CHEF_SCENE, stMgr = window.STATION_MGR;
+    // tap your hands (the bottom tray) to drop / discard whatever you're holding
+    const hb = scene.handCenter ? scene.handCenter() : null;
+    if (_hand && hb && Math.abs(p.x - hb.cx) <= hb.w / 2 && Math.abs(p.y - hb.cy) <= scene.H * 0.05) {
+      _setHand(null); window.SFX?.place(); _dragging = false; return;
+    }
     const t = _hit(p.x, p.y);
+    // bins ALWAYS hand you their ingredient — swapping out whatever you were holding
+    if (t && t.kind === 'station' && t.inst.kind === 'bin') {
+      _setHand(t.inst.def.gives); _dragging = true;
+      scene.showGhost(ITEMS[_hand].emoji); scene.moveGhost(p.x, p.y); window.SFX?.pickup();
+      return;
+    }
     if (_hand == null && t && t.kind === 'station') {
       const item = stMgr.takeFrom(t.inst);
       if (item) { _setHand(item); _dragging = true; scene.showGhost(ITEMS[item].emoji); scene.moveGhost(p.x, p.y); window.SFX?.pickup(); }
-      else if (t.inst.kind === 'maker' && t.inst.state === 'idle') { stMgr.startMake(t.inst); window.SFX?.place(); }
+      else if (t.inst.kind === 'maker' && stMgr.canPlace(t.inst)) { stMgr.startMake(t.inst); window.SFX?.place(); }
     } else {
       _dragging = false;
     }
@@ -138,6 +164,7 @@ const ChefController = (() => {
     window.dispatchEvent(new CustomEvent('dk:shiftEnded', { detail: {
       coins: _shiftCoins, total: _coins, served: _served, rep: _rep, day: _day,
       goal: _goal, goalStars: _goalStars() } }));
+    _save();
     _day++;
   }
   function startShift(tier) {
@@ -177,8 +204,29 @@ const ChefController = (() => {
   // ── Staff ────────────────────────────────────────────────────────────────────
   function _cookIds() { return _staff.filter(s => s.role === 'cook').map(s => s.stationId); }
   function _syncCookBadges() { window.STATION_MGR?.setCookStations(_cookIds()); }
-  function hireCook(stationId) { _staff.push({ role: 'cook', stationId }); window.STAFF_MGR?.addCook(stationId); _syncCookBadges(); send('HIRE_COOK', { stationId }); }
-  function hireWaiter() { _staff.push({ role: 'waiter' }); window.STAFF_MGR?.addWaiter(); send('HIRE_SERVER', { stationId: 'any' }); }
+  function hireCook(stationId) { _staff.push({ role: 'cook', stationId }); window.STAFF_MGR?.addCook(stationId); _syncCookBadges(); _save(); }
+  function hireWaiter() { _staff.push({ role: 'waiter' }); window.STAFF_MGR?.addWaiter(); _save(); }
+
+  // ── Persistence: SAVE_STATE is the source of truth so coins/upgrades/staff stick
+  //   even if the player never opens the shop (the old inline-onclick shop was the
+  //   only saver, which the Devvit CSP blocked → "money didn't flow" across reloads).
+  function _save() {
+    const stMgr = window.STATION_MGR;
+    const cookStations = new Set(_staff.filter(s => s.role === 'cook').map(s => s.stationId));
+    const waiters = _staff.filter(s => s.role === 'waiter').length;
+    const stations = (stMgr?.getStations() || []).filter(s => s.kind === 'cook' || s.kind === 'maker').map((st, i) => ({
+      id: st.id, x: i, y: 0, stationType: st.defId, level: st.level, hasCook: cookStations.has(st.id), hasServer: false,
+    }));
+    const crew = Array.from({ length: waiters }, (_, i) => ({ slotIndex: i, personality: 'steady', name: 'Waiter ' + (i + 1), subredditOrigin: '' }));
+    send('SAVE_STATE', { state: {
+      saveVersion: 1, coins: _coins, renown: 0, tradeTokens: 0, lifetimeCoinsThisRun: _coins,
+      stations, crew, voyageCount: 0, unlockedCuisineTiers: _kitchenTier - 1,
+      incomeMultiplierLevel: 0, offlineCapLevel: 0, offlineEffLevel: 0, cookSpeedLevel: _chefSpeedLevel,
+      startingCoinsLevel: 0, extraRerollUnlocked: false, royaltyBoostLevel: 0,
+      streak: 0, lastStreakDate: '', rerollsToday: 0, lastSeen: Date.now(), incomePerSec: 0,
+    } });
+  }
+  setInterval(() => { if (_shiftActive && !_paused) _save(); }, 15000); // periodic autosave
   function getStaff() { return _staff.slice(); }
   function countStaff(role) { return _staff.filter(s => s.role === role).length; }
 
@@ -189,7 +237,7 @@ const ChefController = (() => {
   function getRep() { return _rep; }
   function getDay() { return _day; }
   function setKitchenTier(t) { _kitchenTier = t; }
-  function upgradeChefSpeed(level) { window._cookSpeedMult = Math.max(0.4, 1 - level * 0.12); } // prep speed
+  function upgradeChefSpeed(level) { _chefSpeedLevel = level || 0; window._cookSpeedMult = Math.max(0.4, 1 - _chefSpeedLevel * 0.12); } // prep speed
   function upgradeTraySize() { /* no tray in the assembly model */ }
 
   // ── Server hydrate ───────────────────────────────────────────────────────────
@@ -198,13 +246,16 @@ const ChefController = (() => {
     _coins = st.coins || 0;
     _cravings = ev.detail?.cravings?.cravings?.multipliers || [];
     _kitchenTier = Math.min(5, (st.unlockedCuisineTiers || 0) + 1);
-    upgradeTraySize(st.offlineEffLevel || 0);
+    upgradeChefSpeed(st.cookSpeedLevel || 0);
     (st.crew || []).forEach(() => _staff.push({ role: 'waiter' }));
     (st.stations || []).forEach(s => { if (s.hasCook) _staff.push({ role: 'cook', stationId: s.id }); });
     _updateCoins(); _setRep(_rep);
     window.setTimeout(() => {
       if (window.CHEF_SCENE && window.STATION_MGR) {
-        window.STAFF_MGR?.restore(_staff); _syncCookBadges(); startShift(_kitchenTier);
+        window.STATION_MGR.restoreLevels?.(st.stations);   // restore upgrade levels
+        window.CHEF_SCENE.rebuildKitchen?.(_kitchenTier);  // rebuild to saved tier (re-inits stations w/ levels)
+        window.STAFF_MGR?.restore(_staff); _syncCookBadges();
+        _armStart(() => startShift(_kitchenTier));
       }
     }, 500);
   });
@@ -213,11 +264,11 @@ const ChefController = (() => {
   // Dev fallback (local Playwright / standalone — no Devvit server)
   window.addEventListener('dk:sceneReady', () => {
     window.setTimeout(() => {
-      if (!window._dkInitDone) { _coins = 80; _updateCoins(); window.STAFF_MGR?.restore(_staff); _syncCookBadges(); startShift(1); }
+      if (!window._dkInitDone) { _coins = 80; _updateCoins(); window.STAFF_MGR?.restore(_staff); _syncCookBadges(); _armStart(() => startShift(1)); }
     }, 1400);
   });
 
-  return { startShift, endShift, pauseShift, resumeShift, deliverDish, getCoins, setCoins, getTier, getRep, getDay,
+  return { startShift, beginGame, endShift, pauseShift, resumeShift, deliverDish, getCoins, setCoins, getTier, getRep, getDay,
     setKitchenTier, upgradeChefSpeed, upgradeTraySize, hireCook, hireWaiter, getStaff, countStaff };
 })();
 

@@ -20,7 +20,7 @@ const CustomerManager = (() => {
   function stopSpawning() { if (_spawnTimer) { clearTimeout(_spawnTimer); _spawnTimer = null; } }
 
   function _scheduleNext(forced) {
-    const base = SPAWN_INTERVAL_MS / Math.sqrt(_difficulty);
+    const base = SPAWN_INTERVAL_MS / Math.pow(_difficulty, 0.4);
     const delay = forced != null ? forced : base * 0.7 + Math.random() * base * 0.6;
     _spawnTimer = window.setTimeout(() => {
       if (getCustomers().length < SLOTS) _spawnOne();
@@ -41,7 +41,7 @@ const CustomerManager = (() => {
 
     const roll = Math.random();
     const type = roll < 0.1 ? 'vip' : roll < 0.28 ? 'impatient' : 'regular';
-    const patience = (CUSTOMER_PATIENCE[type] || 18000) / Math.sqrt(_difficulty);
+    const patience = (CUSTOMER_PATIENCE[type] || 32000) / Math.pow(_difficulty, 0.3);
 
     const id = 'c' + (++_cid);
     const style = DrawChar.randomStyle(_cid);

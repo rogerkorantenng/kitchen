@@ -83,9 +83,9 @@ class ChefScene extends Phaser.Scene {
     const usable = this.W - margin * 2;
     const cell = usable / n;
     const cx = margin + cell * (i + 0.5);
-    const headCY = this.diningH - Math.round(this.H * 0.055);
+    const headCY = this.diningH - Math.round(this.H * 0.05);
     const w = Math.min(cell * 0.82, this.W * 0.2);
-    return { cx, headCY, ticketCY: this.diningH - this.H * 0.205, w };
+    return { cx, headCY, ticketCY: this.diningH - this.H * 0.15, w };
   }
 
   handCenter() { return { cx: this.W / 2, cy: this.handCY, w: this.W * 0.5 }; }

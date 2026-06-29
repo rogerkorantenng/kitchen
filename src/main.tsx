@@ -131,6 +131,22 @@ Devvit.addCustomPostType({
 
         case 'SAVE_STATE': {
           await saveState(context, msg.data.state);
+          // Keep the "Top Chefs" leaderboard fresh from the player's best coin run.
+          // (Renown is unused in this build, so the renown board ranks chefs by coins.)
+          try {
+            const best = Math.max(
+              msg.data.state.lifetimeCoinsThisRun ?? 0,
+              msg.data.state.coins ?? 0
+            );
+            if (best > 0) {
+              const user = await context.reddit.getCurrentUser();
+              const username = user?.username ?? 'Anonymous';
+              await context.redis.zAdd('leaderboard:renown', { member: userId, score: best });
+              await context.redis.set(`username:${userId}`, username);
+            }
+          } catch {
+            /* leaderboard is best-effort; never block a save on it */
+          }
           break;
         }
 

@@ -17,7 +17,7 @@ const StationManager = (() => {
 
   function _init(tier) {
     _kitchenTier = tier;
-    _list.forEach(_destroy);
+    _list.forEach(inst => { _clearTimers(inst); _destroy(inst); });
     _list = [];
     const ids = KITCHEN_STATIONS[tier] || KITCHEN_STATIONS[1];
     const counts = {};
@@ -27,7 +27,7 @@ const StationManager = (() => {
       _list.push({
         id: defId + '#' + counts[defId], defId, kind: def.kind, def,
         slotIndex: i, level: _levels[defId + '#' + counts[defId]] || 0,
-        state: 'idle', item: null, output: null, cookStart: 0,
+        slots: [],            // cook/maker: [{ phase:'cooking'|'ready'|'burnt', item, output, startAt, readyAt, burnTimer }]
         contents: [], dish: null, objs: {},
       });
     });
@@ -161,6 +161,15 @@ const StationManager = (() => {
     [0xff6b6b, 0xffd93d, 0x6bcb77].forEach((c, i) => { g.fillStyle(c, 1); g.fillCircle(L + w*0.22 + i*w*0.1, cy + h*0.34, w*0.028); });
   }
 
+  // round sesame burger bun (used for the Buns bin so it doesn't look like a loaf)
+  function _drawBun(g, cx, cy, r) {
+    g.fillStyle(0xc98a4e, 1); g.fillEllipse(cx, cy + r*0.5, r*2.1, r*0.7);
+    g.fillStyle(0xe3a85f, 1); g.fillEllipse(cx, cy + r*0.05, r*2.0, r*1.25);
+    g.fillStyle(0xf0c887, 1); g.fillEllipse(cx, cy - r*0.12, r*1.6, r*0.85);
+    g.fillStyle(0xfff3da, 1);
+    [[-0.45,-0.05],[0.05,-0.35],[0.5,0.0],[-0.1,0.12],[0.32,0.18]].forEach(([dx, dy]) => g.fillEllipse(cx + dx*r, cy + dy*r, r*0.22, r*0.13));
+  }
+
   function _drawPips(inst) {
     const g = inst.objs.pips; if (!g) return; g.clear();
     if (inst.kind !== 'cook' && inst.kind !== 'maker') return;
@@ -176,81 +185,119 @@ const StationManager = (() => {
     if (o.burn) { o.burn.clear(); o.burn.setVisible(false); }
     _drawPips(inst);
     if (inst.kind === 'bin') {
-      o.item.setText(inst.def.emoji).setVisible(true).setY(inst._cy - inst._h*0.18);
-    } else if (inst.kind === 'plate') {
-      if (inst.dish) { o.item.setText(ITEMS[inst.dish].emoji).setVisible(true); o.hint.setStroke('#16a34a', 3).setText('TAKE ✓').setVisible(true); }
-      else if (inst.contents.length) o.item.setText(inst.contents.map(c => ITEMS[c].emoji).join('')).setVisible(true);
-      else o.item.setText('').setVisible(false);
-      o.item.setY(inst._cy - inst._h*0.06);
-    } else { // cook / maker
-      o.item.setY(inst._cy - inst._h*0.12);
-      const scene = _scene();
-      if (inst.state === 'burnt') {
-        if (scene) scene.tweens.killTweensOf(o.item);
+      if (inst.defId === 'buns') {
         o.item.setVisible(false);
-        const cx = inst._cx, cy = inst._cy - inst._h*0.12, r = inst._w*0.17;
-        o.burn.clear();
-        o.burn.fillStyle(0x14110d, 1); o.burn.fillEllipse(cx, cy, r*2.1, r*1.3);
-        o.burn.fillStyle(0x3a2a1a, 1); o.burn.fillEllipse(cx, cy - r*0.12, r*1.5, r*0.9);
-        o.burn.fillStyle(0xff4500, 0.75); o.burn.fillCircle(cx - r*0.5, cy + r*0.1, r*0.2); o.burn.fillCircle(cx + r*0.55, cy, r*0.15);
-        o.burn.setVisible(true);
-        o.hint.setStroke('#b91c1c', 3).setText('🗑 BIN').setVisible(true);
-      } else if (inst.state === 'ready') {
-        const it = inst.kind === 'cook' ? inst.output : inst.def.makes;
-        o.item.setText(ITEMS[it].emoji).setVisible(true);
-        o.hint.setStroke('#16a34a', 3).setText('TAKE ✓').setVisible(true);
-        if (scene) { scene.tweens.killTweensOf(o.item); scene.tweens.add({ targets: o.item, y: inst._cy - inst._h*0.28, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.InOut' }); }
-      } else if (inst.state === 'cooking') {
-        if (scene) scene.tweens.killTweensOf(o.item);
-        o.item.setText(inst.kind === 'cook' ? ITEMS[inst.item].emoji : inst.def.emoji).setVisible(true).setY(inst._cy - inst._h*0.12);
+        const sc = _scene();
+        if (sc) { if (!o.icon) o.icon = sc.add.graphics().setDepth(24); o.icon.clear(); _drawBun(o.icon, inst._cx, inst._cy - inst._h*0.16, inst._w*0.24); }
       } else {
-        if (scene) scene.tweens.killTweensOf(o.item);
-        o.item.setText(inst.kind === 'maker' ? inst.def.emoji : '').setVisible(inst.kind === 'maker').setY(inst._cy - inst._h*0.12);
+        if (o.icon) o.icon.clear();
+        o.item.setText(inst.def.emoji).setVisible(true).setY(inst._cy - inst._h*0.18);
       }
+    } else if (inst.kind === 'plate') {
+      const scene = _scene();
+      o.item.setVisible(false);
+      if (!o.items) o.items = [];
+      const list = inst.dish ? [{ emoji: ITEMS[inst.dish].emoji, dish: true }]
+                             : inst.contents.map(c => ({ emoji: ITEMS[c].emoji }));
+      const n = list.length, total = Math.max(n, o.items.length);
+      for (let i = 0; i < total; i++) {
+        if (i < n) {
+          if (!o.items[i] && scene) o.items[i] = scene.add.text(0, 0, '', { fontSize: '10px' }).setOrigin(0.5).setDepth(24);
+          const t = o.items[i]; if (!t) continue;
+          if (scene) scene.tweens.killTweensOf(t);
+          t.clearTint();
+          if (list[i].dish) {
+            t.setText(list[i].emoji).setFontSize(Math.round(inst._w * 0.44)).setPosition(inst._cx, inst._cy - inst._h * 0.04).setVisible(true);
+            if (scene) scene.tweens.add({ targets: t, y: inst._cy - inst._h * 0.2, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+          } else {
+            // stack: first added sits lowest, later items pile on top
+            const y = inst._cy + inst._h * 0.06 - i * inst._h * 0.16;
+            t.setText(list[i].emoji).setFontSize(Math.round(inst._w * 0.34)).setPosition(inst._cx, y).setVisible(true);
+          }
+        } else if (o.items[i]) { if (scene) scene.tweens.killTweensOf(o.items[i]); o.items[i].setVisible(false); }
+      }
+      if (inst.dish) o.hint.setStroke('#16a34a', 3).setText('TAKE ✓').setVisible(true);
+      else o.hint.setVisible(false);
+    } else { // cook / maker — render EVERY slot (see all 2/3/4 items, not just ×N)
+      const scene = _scene();
+      o.item.setVisible(false);
+      if (o.burn) o.burn.setVisible(false);
+      if (o.count) o.count.setVisible(false);
+      if (scene) scene.tweens.killTweensOf(o.item);
+      if (!o.items) o.items = [];
+      const slots = inst.slots || [];
+      const n = slots.length;
+      const fs = Math.max(9, Math.round(inst._w * (n <= 1 ? 0.42 : n === 2 ? 0.34 : 0.28)));
+      const spacing = n <= 1 ? 0 : Math.min(inst._w * 0.62 / (n - 1), inst._w * 0.33);
+      const baseY = inst._cy - inst._h * 0.12;
+      let readyCount = 0, burntCount = 0;
+      const total = Math.max(n, o.items.length);
+      for (let i = 0; i < total; i++) {
+        if (i < n) {
+          const slot = slots[i];
+          if (!o.items[i] && scene) o.items[i] = scene.add.text(0, 0, '', { fontSize: '10px' }).setOrigin(0.5).setDepth(24);
+          const t = o.items[i]; if (!t) continue;
+          if (scene) scene.tweens.killTweensOf(t);
+          let emoji, tint = null;
+          if (slot.phase === 'ready') { emoji = ITEMS[slot.output].emoji; readyCount++; }
+          else if (slot.phase === 'burnt') { emoji = ITEMS[slot.output].emoji; tint = 0x3a3a3a; burntCount++; }
+          else { emoji = inst.kind === 'cook' ? ITEMS[slot.item].emoji : inst.def.emoji; } // cooking
+          const x = inst._cx + (i - (n - 1) / 2) * spacing;
+          t.setText(emoji).setFontSize(fs).setPosition(x, baseY).setVisible(true);
+          if (tint != null) t.setTint(tint); else t.clearTint();
+          if (slot.phase === 'ready' && scene) scene.tweens.add({ targets: t, y: baseY - inst._h * 0.12, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+        } else if (o.items[i]) {
+          if (scene) scene.tweens.killTweensOf(o.items[i]);
+          o.items[i].setVisible(false);
+        }
+      }
+      if (readyCount) o.hint.setStroke('#16a34a', 3).setText(readyCount > 1 ? 'TAKE ✓ ×' + readyCount : 'TAKE ✓').setVisible(true);
+      else if (burntCount) o.hint.setStroke('#b91c1c', 3).setText(burntCount > 1 ? '🗑 BIN ×' + burntCount : '🗑 BIN').setVisible(true);
+      else o.hint.setVisible(false);
     }
   }
 
   function _destroy(inst) {
     if (!inst.objs) return;
     const scene = _scene();
-    Object.values(inst.objs).forEach(o => { try { scene?.tweens?.killTweensOf(o); o?.destroy?.(); } catch (_) {} });
+    if (inst.objs.items) inst.objs.items.forEach(t => { try { scene?.tweens?.killTweensOf(t); t?.destroy?.(); } catch (_) {} });
+    Object.values(inst.objs).forEach(o => { if (Array.isArray(o)) return; try { scene?.tweens?.killTweensOf(o); o?.destroy?.(); } catch (_) {} });
     inst.objs = {};
   }
 
-  function _cookMs(inst) {
-    let ms = (inst.def.time || 3000) * (window._cookSpeedMult || 1);
-    if (inst.level >= 1) ms *= 0.8;
-    if (inst.level >= 2) ms *= 0.8;
-    return Math.max(350, ms);
-  }
-  // how long a cooked dish can sit on the grill/fryer before it burns
-  function _burnMs(inst) { return Math.max(4500, _cookMs(inst) * 1.7); }
-  function _clearTimers(inst) { if (inst._burnTimer) { clearTimeout(inst._burnTimer); inst._burnTimer = null; } }
+  // Upgrades grow BATCH CAPACITY (make more at once); global "Prep Speed" handles time.
+  function _cookMs(inst) { return Math.max(350, (inst.def.time || 3000) * (window._cookSpeedMult || 1)); }
+  function _burnMs(inst) { return Math.max(5000, _cookMs(inst) * 1.8); }
+  function _cap(inst) { return 1 + (inst.level || 0); }          // Lv0→1, Lv1→2, Lv2→3, Lv3→4
+  function canPlace(inst) { return (inst.kind === 'cook' || inst.kind === 'maker') && inst.slots.length < _cap(inst); }
+  function hasReady(inst) { return (inst.slots || []).some(s => s.phase === 'ready'); }
+  function _clearTimers(inst) { (inst.slots || []).forEach(s => { if (s.burnTimer) { clearTimeout(s.burnTimer); s.burnTimer = null; } }); }
 
-  // progress / burn / smoke tick
+  // progress / burn / smoke tick (per-slot)
   setInterval(() => {
     _list.forEach(inst => {
       const o = inst.objs; if (!o.prog) return;
+      o.prog.clear();
+      const slots = inst.slots || [];
+      if (!slots.length) return;
       const w = inst._w, x = inst._cx - w*0.42, y = inst._cy + inst._h*0.26, bw = w*0.84;
-      if (inst.state === 'cooking') {
-        const pct = Math.min((Date.now() - inst.cookStart) / _cookMs(inst), 1);
-        o.prog.clear();
+      const cooking = slots.filter(s => s.phase === 'cooking');
+      const burning = slots.filter(s => s.phase === 'ready' && s.burnTimer);
+      if (cooking.length) {
+        const soon = cooking.reduce((a, b) => a.startAt < b.startAt ? a : b);
+        const pct = Math.min((Date.now() - soon.startAt) / _cookMs(inst), 1);
         o.prog.fillStyle(0x000000, 0.25); o.prog.fillRoundedRect(x, y, bw, 6, 3);
         o.prog.fillStyle(0xf97316, 1); o.prog.fillRoundedRect(x, y, bw*pct, 6, 3);
         if (pct > 0.25 && Math.random() < 0.14) _smoke(inst, '〰️', 0.7, 650);
-      } else if (inst.state === 'ready' && inst.kind === 'cook' && inst._burnTimer) {
-        // burn warning: green → orange → red as it approaches burning
-        const pct = Math.min((Date.now() - (inst.readyAt || 0)) / _burnMs(inst), 1);
+      } else if (burning.length) {
+        const soon = burning.reduce((a, b) => a.readyAt < b.readyAt ? a : b);
+        const pct = Math.min((Date.now() - soon.readyAt) / _burnMs(inst), 1);
         const col = pct < 0.5 ? 0x22c55e : pct < 0.8 ? 0xf59e0b : 0xef4444;
-        o.prog.clear();
         o.prog.fillStyle(0x000000, 0.25); o.prog.fillRoundedRect(x, y, bw, 6, 3);
         o.prog.fillStyle(col, 1); o.prog.fillRoundedRect(x, y, bw*pct, 6, 3);
         if (pct > 0.7 && Math.random() < 0.2) _smoke(inst, '💨', 0.5, 700);
-      } else if (inst.state === 'burnt') {
-        o.prog.clear();
+      } else if (slots.some(s => s.phase === 'burnt')) {
         if (Math.random() < 0.25) _smoke(inst, '💨', 0.6, 850);
-      } else {
-        o.prog.clear();
       }
     });
   }, 60);
@@ -259,18 +306,18 @@ const StationManager = (() => {
     if (s) _scene().tweens.add({ targets: s, y: s.y - 26, alpha: 0, duration: dur, onComplete: () => s.destroy() });
   }
 
-  function _finish(inst) {
-    inst.state = 'ready'; inst.readyAt = Date.now();
+  function _finishSlot(inst, slot) {
+    if (!inst.slots.includes(slot) || slot.phase !== 'cooking') return;
+    slot.phase = 'ready'; slot.readyAt = Date.now();
     _refresh(inst);
     window.SFX?.ready();
     const o = inst.objs, scene = _scene();
-    if (o.body && scene) scene.tweens.add({ targets: o.body, scaleX: 1.06, scaleY: 1.06, duration: 110, yoyo: true });
-    // cook stations burn if a finished dish is left too long — but a hired cook tends it
+    if (o.body && scene) scene.tweens.add({ targets: o.body, scaleX: 1.05, scaleY: 1.05, duration: 110, yoyo: true });
+    // cook-station slots burn if left too long — unless a hired cook tends the station
     if (inst.kind === 'cook' && !_cookSet.has(inst.id)) {
-      _clearTimers(inst);
-      inst._burnTimer = window.setTimeout(() => {
-        if (inst.state === 'ready') {
-          inst.state = 'burnt'; _refresh(inst);
+      slot.burnTimer = window.setTimeout(() => {
+        if (slot.phase === 'ready') {
+          slot.phase = 'burnt'; slot.burnTimer = null; _refresh(inst);
           window.SFX?.fail();
           window.dispatchEvent(new CustomEvent('dk:burnt', { detail: { id: inst.id } }));
         }
@@ -280,7 +327,7 @@ const StationManager = (() => {
 
   // ── Drop-target highlighting (during drag) ───────────────────────────────────
   function _canAccept(inst, item) {
-    if (inst.kind === 'cook') return inst.state === 'idle' && inst.def.accepts && !!inst.def.accepts[item];
+    if (inst.kind === 'cook') return canPlace(inst) && inst.def.accepts && !!inst.def.accepts[item];
     if (inst.kind === 'plate') return !inst.dish && inst.contents.length < 3 && !ITEMS[item]?.dish;
     return false;
   }
@@ -308,23 +355,25 @@ const StationManager = (() => {
   // ── Public model API ─────────────────────────────────────────────────────────
   function getStations() { return _list; }
   function stationAt(x, y) {
-    return _list.find(i => Math.abs(x - i._cx) <= i._w*0.6 && Math.abs(y - i._cy) <= i._h*0.75) || null;
+    return _list.find(i => Math.abs(x - i._cx) <= i._w*0.52 && Math.abs(y - i._cy) <= i._h*0.6) || null;
   }
 
   function startCook(inst, item) {
-    if (inst.kind !== 'cook' || inst.state !== 'idle') return false;
+    if (inst.kind !== 'cook' || !canPlace(inst)) return false;
     const out = inst.def.accepts && inst.def.accepts[item];
     if (!out) return false;
-    inst.state = 'cooking'; inst.item = item; inst.output = out; inst.cookStart = Date.now();
+    const slot = { phase: 'cooking', item, output: out, startAt: Date.now(), readyAt: 0, burnTimer: null };
+    inst.slots.push(slot);
     _refresh(inst); window.SFX?.sizzle();
-    window.setTimeout(() => { if (inst.state === 'cooking') _finish(inst); }, _cookMs(inst));
+    window.setTimeout(() => _finishSlot(inst, slot), _cookMs(inst));
     return true;
   }
   function startMake(inst) {
-    if (inst.kind !== 'maker' || inst.state !== 'idle') return false;
-    inst.state = 'cooking'; inst.cookStart = Date.now();
+    if (inst.kind !== 'maker' || !canPlace(inst)) return false;
+    const slot = { phase: 'cooking', output: inst.def.makes, startAt: Date.now(), readyAt: 0, burnTimer: null };
+    inst.slots.push(slot);
     _refresh(inst);
-    window.setTimeout(() => { if (inst.state === 'cooking') _finish(inst); }, _cookMs(inst));
+    window.setTimeout(() => _finishSlot(inst, slot), _cookMs(inst));
     return true;
   }
 
@@ -336,19 +385,20 @@ const StationManager = (() => {
       if (inst.contents.length) { const c = inst.contents.pop(); _refresh(inst); return c; }
       return null;
     }
-    if (inst.state === 'burnt') {
-      // bin the ruined food — clears the station, nothing useful picked up
-      _clearTimers(inst);
-      inst.state = 'idle'; inst.item = null; inst.output = null; _refresh(inst);
+    // cook / maker — take a ready slot first, else bin a burnt one
+    const ri = inst.slots.findIndex(s => s.phase === 'ready');
+    if (ri >= 0) {
+      const slot = inst.slots[ri];
+      if (slot.burnTimer) clearTimeout(slot.burnTimer);
+      inst.slots.splice(ri, 1); _refresh(inst);
+      return slot.output;
+    }
+    const bi = inst.slots.findIndex(s => s.phase === 'burnt');
+    if (bi >= 0) {
+      inst.slots.splice(bi, 1); _refresh(inst);
       _scene()?.showFloatText(inst._cx, inst._cy - inst._h*0.7, '🔥 Binned', '#ef4444', 12);
       window.SFX?.place();
       return null;
-    }
-    if (inst.state === 'ready') {
-      const it = inst.kind === 'cook' ? inst.output : inst.def.makes;
-      _clearTimers(inst);
-      inst.state = 'idle'; inst.item = null; inst.output = null; _refresh(inst);
-      return it;
     }
     return null;
   }
@@ -382,13 +432,15 @@ const StationManager = (() => {
   function servableSources() {
     const out = [];
     _list.forEach(inst => {
-      if (inst.kind === 'plate' && inst.dish) out.push({ inst, dish: inst.dish });
-      else if (inst.kind === 'maker' && inst.state === 'ready') out.push({ inst, dish: inst.def.makes });
-      else if (inst.kind === 'cook' && inst.state === 'ready' && ITEMS[inst.output]?.dish) out.push({ inst, dish: inst.output });
+      if (inst.kind === 'plate' && inst.dish) { out.push({ inst, dish: inst.dish }); return; }
+      if (inst.kind === 'maker' || inst.kind === 'cook') {
+        const ready = (inst.slots || []).find(s => s.phase === 'ready' && ITEMS[s.output]?.dish);
+        if (ready) out.push({ inst, dish: ready.output });
+      }
     });
     return out;
   }
-  function idleMakers() { return _list.filter(i => i.kind === 'maker' && i.state === 'idle'); }
+  function idleMakers() { return _list.filter(i => i.kind === 'maker' && canPlace(i)); }
 
   // ── Upgrades (cook/maker speed) ──────────────────────────────────────────────
   function upgradableStations() { return _list.filter(i => i.kind === 'cook' || i.kind === 'maker'); }
@@ -405,18 +457,19 @@ const StationManager = (() => {
   }
 
   function resetForNewShift() {
-    _list.forEach(inst => { _clearTimers(inst); inst.state = 'idle'; inst.item = null; inst.output = null; inst.contents = []; inst.dish = null; _refresh(inst); });
+    _list.forEach(inst => { _clearTimers(inst); inst.slots = []; inst.contents = []; inst.dish = null; _refresh(inst); });
   }
   function rebuildForTier(tier) { _init(tier); }
   function setCookStations(ids) { _cookSet = new Set(ids || []); }
+  function restoreLevels(saved) { (saved || []).forEach(s => { if (s && s.id != null && typeof s.level === 'number') _levels[s.id] = s.level; }); }
 
   window.addEventListener('dk:sceneReady',     () => _init(_kitchenTier));
   window.addEventListener('dk:kitchenRebuilt', (ev) => _init(ev.detail.tier));
   window.addEventListener('dk:relayout',       () => _relayout());
 
-  return { getStations, stationAt, startCook, startMake, takeFrom, putTo,
+  return { getStations, stationAt, startCook, startMake, takeFrom, putTo, canPlace, hasReady,
     servableSources, idleMakers, upgradableStations, getUpgradeCost, upgradeStation,
-    setDropHighlight, clearDropHighlight, resetForNewShift, rebuildForTier, setCookStations };
+    setDropHighlight, clearDropHighlight, resetForNewShift, rebuildForTier, setCookStations, restoreLevels };
 })();
 
 window.STATION_MGR = StationManager;
