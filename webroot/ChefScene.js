@@ -18,7 +18,7 @@ class ChefScene extends Phaser.Scene {
     super({ key: 'ChefScene' });
     this.kitchenTier = 1;
     this._bg = [];
-    this._tray = [];
+    this._hand = null;
     window.CHEF_SCENE = this;
   }
 
@@ -28,7 +28,7 @@ class ChefScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#f4d9b0');
     this._computeLayout();
     this._drawBackground();
-    this._buildTray();
+    this._buildHand();
     this.scale.on('resize', this._onResize, this);
     window.dispatchEvent(new CustomEvent('dk:sceneReady'));
   }
@@ -37,31 +37,45 @@ class ChefScene extends Phaser.Scene {
     this.W = g.width; this.H = g.height;
     this._computeLayout();
     this._drawBackground();
-    this._layoutTray();
+    this._layoutHand();
     window.dispatchEvent(new CustomEvent('dk:relayout'));
   }
 
   // ─── Layout metrics ──────────────────────────────────────────────────────────
   _computeLayout() {
     const W = this.W, H = this.H;
-    this.diningH   = Math.round(H * 0.44);   // bottom of dining zone (the service ledge)
-    this.ledgeH    = Math.round(H * 0.05);
-    this.kitchenTop= this.diningH + this.ledgeH;
-    this.trayCY    = H - Math.round(H * 0.07);
-    // station band sits between the kitchen counter top and the tray
-    this.stationBand = (this.trayCY - this.kitchenTop);
-    this.stationCY = this.kitchenTop + this.stationBand * 0.40;
+    this.diningH    = Math.round(H * 0.36);   // bottom of dining zone (the service ledge)
+    this.ledgeH     = Math.round(H * 0.045);
+    this.kitchenTop = this.diningH + this.ledgeH;
+    this.handCY     = H - Math.round(H * 0.072);
+    this.gridTop    = this.kitchenTop + Math.round(H * 0.075);
+    this.gridBottom = this.handCY - Math.round(H * 0.05);
+    this.stationCY  = (this.gridTop + this.gridBottom) / 2;     // (bg compat)
+    this.stationBand = this.gridBottom - this.gridTop;
+    this._gridCache = null;
   }
 
-  // Station slot rect: i of n across the kitchen counter.
-  stationSlot(i, n) {
-    const margin = this.W * 0.04;
-    const usable = this.W - margin * 2;
-    const cell = usable / n;
-    const w = Math.min(cell * 0.88, this.W * 0.42, this.stationBand * 0.62);
-    const h = w * 0.9;
-    return { cx: margin + cell * (i + 0.5), cy: this.stationCY, w, h };
+  // Grid of n station slots laid out within the kitchen area (rows centred).
+  gridSlots(n) {
+    if (this._gridCache && this._gridCache.n === n) return this._gridCache.slots;
+    const W = this.W, marginX = W * 0.03;
+    const cols = W < 560 ? (n <= 6 ? 3 : 4) : Math.min(n, 6);
+    const rows = Math.ceil(n / cols);
+    const cellW = (W - marginX * 2) / cols;
+    const cellH = (this.gridBottom - this.gridTop) / rows;
+    const w = Math.min(cellW * 0.84, cellH * 0.8, W * 0.26);
+    const h = w * 0.92;
+    const slots = [];
+    for (let i = 0; i < n; i++) {
+      const r = Math.floor(i / cols), c = i % cols;
+      const rowCount = (r === rows - 1) ? (n - cols * (rows - 1)) : cols;
+      const startX = (W - rowCount * cellW) / 2;
+      slots.push({ cx: startX + cellW * (c + 0.5), cy: this.gridTop + cellH * (r + 0.5), w, h });
+    }
+    this._gridCache = { n, slots };
+    return slots;
   }
+  stationSlot(i, n) { return this.gridSlots(n)[i]; }
 
   // Customer slot center (head) + ticket anchor.
   customerSlot(i, n) {
@@ -74,7 +88,8 @@ class ChefScene extends Phaser.Scene {
     return { cx, headCY, ticketCY: this.diningH - this.H * 0.205, w };
   }
 
-  trayCenter() { return { cx: this.W / 2, cy: this.trayCY, w: this.W * 0.62 }; }
+  handCenter() { return { cx: this.W / 2, cy: this.handCY, w: this.W * 0.5 }; }
+  trayCenter() { return this.handCenter(); } // alias (fly-anim source)
   coinScreenPos() { return { x: this.W - this.W * 0.12, y: this.H * 0.045 }; }
 
   // ─── Background ──────────────────────────────────────────────────────────────
@@ -112,6 +127,15 @@ class ChefScene extends Phaser.Scene {
       g.fillStyle(0xffd98a, 1); g.fillEllipse(lx, ly + 6, 22, 10);
     }
 
+    // potted plants in the dining corners (life, away from customer slots)
+    [[W*0.045, 0x2e7d32], [W*0.955, 0x388e3c]].forEach(([px, leaf]) => {
+      const py = this.diningH - 6;
+      g.fillStyle(0xa9743f, 0.95); g.fillRoundedRect(px - 12, py - 20, 24, 22, { tl:2, tr:2, bl:8, br:8 });
+      g.fillStyle(0x8a5a30, 0.95); g.fillRect(px - 12, py - 20, 24, 5);
+      g.fillStyle(leaf, 0.9);
+      [[-9,-24],[9,-24],[0,-34],[-5,-18],[6,-18]].forEach(([ox, oy]) => g.fillEllipse(px + ox, py + oy, 16, 24));
+    });
+
     // ── Service ledge (counter customers stand behind) ──
     const ly0 = this.diningH;
     g.fillStyle(0x7a4a28, 1); g.fillRect(0, ly0, W, this.ledgeH);
@@ -129,7 +153,7 @@ class ChefScene extends Phaser.Scene {
       g.fillStyle(0xfff7ea, 0.5); g.fillRoundedRect(x + 2, tileY, tw - 4, th, 4);
     }
     // stainless counter surface the stations sit on
-    const cy0 = this.stationCY + this.stationBand * 0.18;
+    const cy0 = this.gridTop - this.H * 0.03;
     g.fillStyle(0xcfd6dd, 1); g.fillRect(0, cy0, W, H - cy0);
     g.fillStyle(0xe6ebf0, 1); g.fillRect(0, cy0, W, 6);
     g.fillStyle(0xb9c2cc, 1); g.fillRect(0, cy0 + 6, W, (H - cy0) * 0.12);
@@ -142,59 +166,61 @@ class ChefScene extends Phaser.Scene {
     g.fillStyle(0xc89456, 1); g.fillRect(0, lipY, W, 4);
   }
 
-  // ─── Serving tray (the plate in your hands) ──────────────────────────────────
-  _buildTray() {
-    this.trayGfx = this.add.graphics().setDepth(60);
-    this.trayText = this.add.text(0, 0, '', { fontSize: Math.round(this.W * 0.05) + 'px' })
-      .setOrigin(0.5).setDepth(61);
-    this.trayHint = this.add.text(0, 0, '', {
-      fontSize: '11px', fontStyle: 'bold', color: '#8b5e3c',
-    }).setOrigin(0.5).setDepth(61);
-    this._layoutTray();
-    this.setHeldItems(this._tray);
+  // ─── Held item ("hand") + drag ghost ─────────────────────────────────────────
+  _buildHand() {
+    this.handGfx = this.add.graphics().setDepth(60);
+    this.handText = this.add.text(0, 0, '', { fontSize: Math.round(this.W * 0.07) + 'px' }).setOrigin(0.5).setDepth(61);
+    this.handHint = this.add.text(0, 0, '', { fontSize: '11px', fontStyle: 'bold', color: '#8b5e3c' }).setOrigin(0.5).setDepth(61);
+    this.ghost = this.add.text(0, 0, '', { fontSize: Math.round(this.W * 0.08) + 'px' }).setOrigin(0.5).setDepth(5200).setVisible(false);
+    this._layoutHand();
+    this.setHand(this._hand || null);
   }
-  _layoutTray() {
-    const t = this.trayCenter();
-    this._trayBox = t;
-    this.setHeldItems(this._tray);
-  }
+  _layoutHand() { this._handBox = this.handCenter(); this.setHand(this._hand || null); }
 
-  setHeldItems(emojis) {
-    this._tray = emojis || [];
-    const t = this._trayBox || this.trayCenter();
-    const g = this.trayGfx; if (!g) return;
+  setHand(itemEmoji) {
+    this._hand = itemEmoji || null;
+    const t = this._handBox || this.handCenter();
+    const g = this.handGfx; if (!g) return;
     g.clear();
-    const w = t.w, h = this.H * 0.075, x = t.cx - w/2, y = t.cy - h/2;
-    // plate / tray
-    g.fillStyle(0x000000, 0.12); g.fillRoundedRect(x + 3, y + 4, w, h, 16);
-    g.fillStyle(0xe9eef3, 1); g.fillRoundedRect(x, y, w, h, 16);
-    g.fillStyle(0xffffff, 0.7); g.fillRoundedRect(x + 6, y + 4, w - 12, h * 0.36, 12);
-    g.lineStyle(2, 0xc6cdd4, 1); g.strokeRoundedRect(x, y, w, h, 16);
-    if (!this._tray.length) {
-      this.trayText.setVisible(false);
-      this.trayHint.setText('Tap a station to cook 🍳').setPosition(t.cx, t.cy).setVisible(true);
+    const w = t.w, h = this.H * 0.085, x = t.cx - w/2, y = t.cy - h/2;
+    g.fillStyle(0x000000, 0.12); g.fillRoundedRect(x + 3, y + 4, w, h, 18);
+    g.fillStyle(this._hand ? 0xfff3d6 : 0xeef1f4, 1); g.fillRoundedRect(x, y, w, h, 18);
+    g.fillStyle(0xffffff, 0.7); g.fillRoundedRect(x + 6, y + 4, w - 12, h * 0.34, 14);
+    g.lineStyle(2.5, this._hand ? 0xf0c27a : 0xc6cdd4, 1); g.strokeRoundedRect(x, y, w, h, 18);
+    if (this._hand) {
+      this.handHint.setVisible(false);
+      this.handText.setText(this._hand).setPosition(t.cx, t.cy).setVisible(true);
     } else {
-      this.trayHint.setVisible(false);
-      this.trayText.setText(this._tray.join('  ')).setPosition(t.cx, t.cy).setVisible(true);
+      this.handText.setVisible(false);
+      this.handHint.setText('Tap an ingredient to pick it up 🥩').setPosition(t.cx, t.cy).setVisible(true);
     }
   }
+  showGhost(emoji) { if (this.ghost) this.ghost.setText(emoji).setVisible(true); }
+  moveGhost(x, y) { if (this.ghost) this.ghost.setPosition(x, y); }
+  hideGhost() { if (this.ghost) this.ghost.setVisible(false); }
 
   // ─── Flying plated dish (the "serve" animation) ──────────────────────────────
-  flyDish(fromX, fromY, toX, toY, emoji, cb) {
+  flyDish(fromX, fromY, toX, toY, dishId, cb) {
     const plate = this.add.graphics().setDepth(3500).setPosition(fromX, fromY);
-    plate.fillStyle(0x000000, 0.15); plate.fillEllipse(0, 4, 34, 12);
-    plate.fillStyle(0xffffff, 1); plate.fillEllipse(0, 0, 32, 12);
-    plate.fillStyle(0xe6ebf0, 1); plate.fillEllipse(0, -1, 22, 8);
-    const food = this.add.text(fromX, fromY - 7, emoji, { fontSize: '22px' }).setOrigin(0.5).setDepth(3501);
-    const midX = (fromX + toX) / 2, midY = Math.min(fromY, toY) - 80;
+    plate.fillStyle(0x000000, 0.15); plate.fillEllipse(0, 5, 42, 14);
+    plate.fillStyle(0xffffff, 1); plate.fillEllipse(0, 0, 40, 15);
+    plate.fillStyle(0xe6ebf0, 1); plate.fillEllipse(0, -1, 28, 10);
+    let food;
+    if (window.DishArt && DishArt.has(dishId)) {
+      food = this.add.graphics().setDepth(3501).setPosition(fromX, fromY - 8);
+      DishArt.draw(food, 0, 0, 14, dishId);
+    } else {
+      food = this.add.text(fromX, fromY - 8, (window.ITEMS && ITEMS[dishId]?.emoji) || dishId || '🍽️', { fontSize: '24px' }).setOrigin(0.5).setDepth(3501);
+    }
+    const midX = (fromX + toX) / 2, midY = Math.min(fromY, toY) - 84;
     const ctrl = { t: 0 };
     this.tweens.add({
-      targets: ctrl, t: 1, duration: 440, ease: 'Sine.InOut',
+      targets: ctrl, t: 1, duration: 460, ease: 'Sine.InOut',
       onUpdate: () => {
         const t = ctrl.t, it = 1 - t;
         const x = it*it*fromX + 2*it*t*midX + t*t*toX;
         const y = it*it*fromY + 2*it*t*midY + t*t*toY;
-        plate.setPosition(x, y); food.setPosition(x, y - 7).setRotation(Math.sin(t * Math.PI) * 0.3);
+        plate.setPosition(x, y); food.setPosition(x, y - 8).setRotation(Math.sin(t * Math.PI) * 0.25);
       },
       onComplete: () => {
         this.tweens.add({ targets: [plate, food], scaleX: 1.3, scaleY: 1.3, alpha: 0, duration: 220,

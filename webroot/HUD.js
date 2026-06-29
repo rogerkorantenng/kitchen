@@ -24,6 +24,7 @@ const HUD = (() => {
         <div class="hud-center">
           <div id="hud-day" class="hud-day">DAY 1</div>
           <div id="hud-timer" class="hud-timer">1:00</div>
+          <div id="hud-combo" class="hud-combo"></div>
         </div>
         <div class="hud-right">
           <button id="hud-shop" class="hud-shop" onclick="window.dispatchEvent(new CustomEvent('dk:openShop'))">🛒</button>
@@ -32,7 +33,21 @@ const HUD = (() => {
             <div class="hud-coins"><span class="hud-coin-i">🪙</span><span id="hud-coins">0</span></div>
           </div>
         </div>
+      </div>
+      <div class="hud-goal">
+        <div class="hud-goal-track"><div id="hud-goal-fill" class="hud-goal-fill"></div></div>
+        <span id="hud-goal-label" class="hud-goal-label">🎯 0 / 0</span>
       </div>`;
+  }
+
+  let _goal = 0, _shiftCoins = 0;
+  function _updateGoal() {
+    const fill = document.getElementById('hud-goal-fill'), lbl = document.getElementById('hud-goal-label');
+    if (!fill || !lbl) return;
+    const pct = _goal > 0 ? Math.min(1, _shiftCoins / _goal) : 0;
+    fill.style.width = Math.round(pct * 100) + '%';
+    fill.style.background = pct >= 1 ? 'linear-gradient(90deg,#22c55e,#4ade80)' : 'linear-gradient(90deg,#f97316,#fbbf24)';
+    lbl.textContent = (pct >= 1 ? '✅ ' : '🎯 ') + _fmt(_shiftCoins) + ' / ' + _fmt(_goal);
   }
 
   function _animateCoins() {
@@ -69,12 +84,23 @@ const HUD = (() => {
   }
 
   // ── Events ────────────────────────────────────────────────────────────────────
-  window.addEventListener('dk:coinsChanged', (ev) => { _coinTarget = ev.detail.coins; _animateCoins(); });
+  window.addEventListener('dk:coinsChanged', (ev) => {
+    _coinTarget = ev.detail.coins; _animateCoins();
+    if (ev.detail.shiftCoins != null) { _shiftCoins = ev.detail.shiftCoins; _updateGoal(); }
+  });
   window.addEventListener('dk:repChanged',  (ev) => _setRep(ev.detail.rep));
+  window.addEventListener('dk:comboChanged', (ev) => {
+    const el = document.getElementById('hud-combo'); if (!el) return;
+    const n = ev.detail.combo || 0;
+    if (n >= 2) { el.textContent = '🔥 ×' + n; el.classList.add('on'); el.style.transform = 'scale(1.25)'; setTimeout(() => { el.style.transform = 'scale(1)'; }, 120); }
+    else { el.textContent = ''; el.classList.remove('on'); }
+  });
   window.addEventListener('dk:shiftStarted', (ev) => {
     _startTimer(ev.detail.durationMs);
     const d = document.getElementById('hud-day');
     if (d) d.textContent = 'DAY ' + (ev.detail.day || 1);
+    _goal = ev.detail.goal || 0; _shiftCoins = 0; _updateGoal();
+    const cb = document.getElementById('hud-combo'); if (cb) cb.textContent = '';
   });
   window.addEventListener('dk:shiftEnded', () => {
     if (_timerInterval) clearInterval(_timerInterval);
