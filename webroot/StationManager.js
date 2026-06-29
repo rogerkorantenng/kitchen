@@ -11,6 +11,7 @@ const StationManager = (() => {
   let _list = [];          // ordered station instances
   let _kitchenTier = 1;
   let _cookSet = new Set(); // station ids that have a hired cook (they don't burn)
+  let _shiftOn = false;     // makers auto-brew only while a shift is running
   const _levels = {};      // stable id -> upgrade level (cook/maker speed)
 
   function _scene() { return window.CHEF_SCENE; }
@@ -462,6 +463,18 @@ const StationManager = (() => {
   function rebuildForTier(tier) { _init(tier); }
   function setCookStations(ids) { _cookSet = new Set(ids || []); }
   function restoreLevels(saved) { (saved || []).forEach(s => { if (s && s.id != null && typeof s.level === 'number') _levels[s.id] = s.level; }); }
+
+  // Makers (soda fountain / coffee machine) keep a ready stock brewing on their
+  // own while a shift runs, so drinks are always there to grab — no more "I tapped
+  // the soda and nothing happened". Upgrading a maker raises how many it stocks.
+  setInterval(() => {
+    if (!_shiftOn) return;
+    _list.forEach(inst => { if (inst.kind === 'maker' && canPlace(inst)) startMake(inst); });
+  }, 650);
+  window.addEventListener('dk:shiftStarted', () => { _shiftOn = true; });
+  window.addEventListener('dk:shiftResumed', () => { _shiftOn = true; });
+  window.addEventListener('dk:shiftEnded',   () => { _shiftOn = false; });
+  window.addEventListener('dk:shiftPaused',  () => { _shiftOn = false; });
 
   window.addEventListener('dk:sceneReady',     () => _init(_kitchenTier));
   window.addEventListener('dk:kitchenRebuilt', (ev) => _init(ev.detail.tier));

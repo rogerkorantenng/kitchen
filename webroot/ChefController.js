@@ -111,7 +111,12 @@ const ChefController = (() => {
     if (_hand == null && t && t.kind === 'station') {
       const item = stMgr.takeFrom(t.inst);
       if (item) { _setHand(item); _dragging = true; scene.showGhost(ITEMS[item].emoji); scene.moveGhost(p.x, p.y); window.SFX?.pickup(); }
-      else if (t.inst.kind === 'maker' && stMgr.canPlace(t.inst)) { stMgr.startMake(t.inst); window.SFX?.place(); }
+      else if (t.inst.kind === 'maker') {
+        // tap a drink machine → start a brew; if it's already at capacity, say so
+        // (it also auto-brews on its own, so a drink is always on the way).
+        if (stMgr.canPlace(t.inst)) { stMgr.startMake(t.inst); window.SFX?.place(); }
+        else { scene.showFloatText(t.inst._cx, t.inst._cy - t.inst._h * 0.7, '⏳ Brewing…', '#0891b2', 12); }
+      }
     } else {
       _dragging = false;
     }
@@ -152,7 +157,7 @@ const ChefController = (() => {
   });
 
   // ── Shift / day ──────────────────────────────────────────────────────────────
-  function _computeGoal() { return Math.round((30 + 22 * _kitchenTier) * (1 + (_day - 1) * 0.3)); }
+  function _computeGoal() { return Math.round((48 + 34 * _kitchenTier) * (1 + (_day - 1) * 0.3)); }
   function _goalStars() {
     const r = _goal > 0 ? _shiftCoins / _goal : 0;
     return r >= 1 ? 3 : r >= 0.65 ? 2 : r >= 0.35 ? 1 : 0;

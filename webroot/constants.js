@@ -146,8 +146,9 @@ const SPAWN_INTERVAL_MS = 4000;
 const MAX_WAITING = 5;
 
 // ─── Shift / day progression ──────────────────────────────────────────────────
-// Shift length grows slightly with tier; difficulty scales by day.
-const SHIFT_DURATIONS = [0, 130, 145, 160, 175, 190]; // seconds, indexed by tier
+// Shift length grows with tier; difficulty scales by day. Long shifts so the
+// player can serve plenty of customers and build real momentum each day.
+const SHIFT_DURATIONS = [0, 240, 270, 300, 330, 360]; // seconds, indexed by tier
 
 // ─── Chef / movement ──────────────────────────────────────────────────────────
 const CHEF_SPEED_PX_S = 235;  // world px per second
