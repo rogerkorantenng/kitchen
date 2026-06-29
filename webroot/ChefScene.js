@@ -61,7 +61,11 @@ class ChefScene extends Phaser.Scene {
     // Top of wall = originY - TILE_H*2.4 (wall height)
     // Bottom of counter row 0 = originY + (0+0)*TH/2 + TH + counter depth
     // Set so the grid occupies the top ~55% leaving room for chef + controls
-    this.originY  = this.H * 0.28;
+    // Push kitchen down so it fills screen center.
+    // Wall top is at originY - TILE_H*2.4, counter bottom at originY + TILE_H*1.85
+    // Chef walks below counter. Total vertical span from wall top to floor = ~H*0.75
+    // Set origin so wall top starts at ~H*0.05 (just under HUD)
+    this.originY  = this.H * 0.32;
   }
 
   // ─── Background ────────────────────────────────────────────────────────────
