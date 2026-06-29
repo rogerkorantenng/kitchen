@@ -18,6 +18,96 @@
   <div id="hud-overlay"></div>
   <div id="shop-overlay"></div>
 
+  <!-- Controls overlay — HTML-based for reliable touch in Devvit iframes -->
+  <div id="controls-overlay" style="
+    position:fixed; bottom:0; left:0; right:0;
+    height:160px;
+    pointer-events:none;
+    z-index:50;
+    display:flex; align-items:flex-end; justify-content:space-between;
+    padding:0 16px 16px;
+  ">
+    <!-- ACTION button (left) -->
+    <div id="btn-action" style="
+      width:72px; height:72px;
+      background:linear-gradient(135deg,#f97316,#c2410c);
+      border-radius:50%;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      box-shadow:0 4px 16px rgba(249,115,22,0.5), 0 2px 4px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.2);
+      border:2px solid rgba(255,255,255,0.3);
+      cursor:pointer; pointer-events:all;
+      user-select:none; -webkit-user-select:none;
+      flex-shrink:0;
+      transition:transform 0.08s, box-shadow 0.08s;
+    ">
+      <span style="font-size:26px; line-height:1;">✋</span>
+      <span style="font-size:7px; color:rgba(255,255,255,0.8); font-weight:700; letter-spacing:1px; margin-top:2px;">ACTION</span>
+    </div>
+
+    <!-- D-PAD (right) -->
+    <div id="dpad" style="
+      position:relative;
+      width:140px; height:140px;
+      flex-shrink:0;
+    ">
+      <!-- Center disc -->
+      <div style="
+        position:absolute; inset:24px;
+        background:rgba(0,0,0,0.18);
+        border-radius:50%;
+      "></div>
+
+      <!-- UP -->
+      <div class="dpad-btn" data-dx="0" data-dy="-1" style="
+        position:absolute; top:0; left:50%; transform:translateX(-50%);
+        width:44px; height:44px;
+        background:rgba(255,255,255,0.22);
+        border-radius:12px 12px 6px 6px;
+        display:flex; align-items:center; justify-content:center;
+        pointer-events:all; cursor:pointer;
+        border:1.5px solid rgba(255,255,255,0.35);
+        box-shadow:0 2px 8px rgba(0,0,0,0.2);
+      "><span style="font-size:18px; color:white; font-weight:900; text-shadow:0 1px 3px rgba(0,0,0,0.4);">▲</span></div>
+
+      <!-- DOWN -->
+      <div class="dpad-btn" data-dx="0" data-dy="1" style="
+        position:absolute; bottom:0; left:50%; transform:translateX(-50%);
+        width:44px; height:44px;
+        background:rgba(255,255,255,0.22);
+        border-radius:6px 6px 12px 12px;
+        display:flex; align-items:center; justify-content:center;
+        pointer-events:all; cursor:pointer;
+        border:1.5px solid rgba(255,255,255,0.35);
+        box-shadow:0 2px 8px rgba(0,0,0,0.2);
+      "><span style="font-size:18px; color:white; font-weight:900; text-shadow:0 1px 3px rgba(0,0,0,0.4);">▼</span></div>
+
+      <!-- LEFT -->
+      <div class="dpad-btn" data-dx="-1" data-dy="0" style="
+        position:absolute; left:0; top:50%; transform:translateY(-50%);
+        width:44px; height:44px;
+        background:rgba(255,255,255,0.22);
+        border-radius:12px 6px 6px 12px;
+        display:flex; align-items:center; justify-content:center;
+        pointer-events:all; cursor:pointer;
+        border:1.5px solid rgba(255,255,255,0.35);
+        box-shadow:0 2px 8px rgba(0,0,0,0.2);
+      "><span style="font-size:18px; color:white; font-weight:900; text-shadow:0 1px 3px rgba(0,0,0,0.4);">◀</span></div>
+
+      <!-- RIGHT -->
+      <div class="dpad-btn" data-dx="1" data-dy="0" style="
+        position:absolute; right:0; top:50%; transform:translateY(-50%);
+        width:44px; height:44px;
+        background:rgba(255,255,255,0.22);
+        border-radius:6px 12px 12px 6px;
+        display:flex; align-items:center; justify-content:center;
+        pointer-events:all; cursor:pointer;
+        border:1.5px solid rgba(255,255,255,0.35);
+        box-shadow:0 2px 8px rgba(0,0,0,0.2);
+      "><span style="font-size:18px; color:white; font-weight:900; text-shadow:0 1px 3px rgba(0,0,0,0.4);">▶</span></div>
+    </div>
+  </div>
+
+
   <script src="phaser.min.js"></script>
   <script src="rpc.js"></script>
   <script src="constants.js"></script>
@@ -29,6 +119,7 @@
   <script src="HUD.js"></script>
   <script src="ShopScreen.js"></script>
   <script src="ParticleEffects.js"></script>
+  <script src="controls.js"></script>
   <script src="main.js"></script>
 </body>
 </html>

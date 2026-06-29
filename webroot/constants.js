@@ -3,8 +3,8 @@
 // ─── Isometric tile geometry ──────────────────────────────────────────────────
 // 2.5D isometric: tiles are drawn as diamonds
 // isoToScreen converts grid (col, row) → screen (x, y) given an origin point
-const TILE_W = 80;   // full tile width in pixels
-const TILE_H = 44;   // full tile height in pixels
+const TILE_W = 72;   // full tile width in pixels
+const TILE_H = 40;   // full tile height in pixels
 
 function isoToScreen(col, row, originX, originY) {
   return {

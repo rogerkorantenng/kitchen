@@ -36,15 +36,32 @@ class ChefScene extends Phaser.Scene {
     this._buildCounter();
     this._buildLanterns();
     this._buildChef();
-    this._buildDpad();
+    // D-pad is now HTML-based (controls.js) — more reliable in Devvit iframes
     this.input.on('pointerdown', this._onTap, this);
     window.dispatchEvent(new CustomEvent('dk:sceneReady'));
   }
 
   _computeLayout() {
-    const tier   = KITCHEN_TIERS[this.kitchenTier];
-    this.originX = this.W / 2;
-    this.originY = this.H * 0.20;
+    const tier = KITCHEN_TIERS[this.kitchenTier];
+    // isoToScreen(col, row) = origin + (col-row)*TW/2 x, (col+row)*TH/2 y
+    // The grid spans cols 0..(cols-1), rows 0..(rows-1) plus row -1 for wall
+    // Rightmost x: isoToScreen(cols-1, 0) + TILE_W  = originX + (cols-1)*TW/2 + TW
+    // Leftmost  x: isoToScreen(0, rows-1)            = originX - (rows-1)*TW/2
+    // So total width = originX + (cols-1)*TW/2 + TW - (originX - (rows-1)*TW/2)
+    //                = (cols + rows - 1) * TW/2 + TW  (independent of originX)
+    // To center: set originX so leftmost = (W - gridW)/2
+    //   leftmost = originX - (rows-1)*TW/2
+    //   => originX = (W - gridW)/2 + (rows-1)*TW/2
+    const gridW   = (tier.cols + tier.rows - 1) * (TILE_W / 2) + TILE_W;
+    const leftOff = (tier.rows - 1) * (TILE_W / 2);
+    this.originX  = (this.W - gridW) / 2 + leftOff;
+
+    // Vertical: top of grid (row -1, wall) to bottom of counter
+    // We want the kitchen to occupy the middle 60% of height
+    // Top of wall = originY - TILE_H*2.4 (wall height)
+    // Bottom of counter row 0 = originY + (0+0)*TH/2 + TH + counter depth
+    // Set so the grid occupies the top ~55% leaving room for chef + controls
+    this.originY  = this.H * 0.28;
   }
 
   // ─── Background ────────────────────────────────────────────────────────────
