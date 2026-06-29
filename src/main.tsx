@@ -2,7 +2,7 @@ import { Devvit } from '@devvit/public-api';
 import type { Context } from '@devvit/public-api';
 import type { StationType } from '../core/save-schema.js';
 import type { WebViewMessage } from './types/messages.js';
-import { getState, saveState, incrementFeast } from './handlers/state.js';
+import { getState, saveState, resetState, incrementFeast } from './handlers/state.js';
 import { getTodayCravings, rerollHarbor } from './handlers/cravings.js';
 import { buyUpgrade, buyNewStation, hireCook, hireServer, newVoyage } from './handlers/upgrades.js';
 import { buyMetaUpgrade, buyExtraReroll, getLeaderboard, updateRenownLeaderboard } from './handlers/prestige.js';
@@ -153,6 +153,12 @@ Devvit.addCustomPostType({
         case 'GET_CRAVINGS': {
           const { harborId, cravings } = await getTodayCravings(context, userId);
           postMsg(context, { type: 'CRAVINGS_RESPONSE', data: { harborId, cravings } });
+          break;
+        }
+
+        case 'RESET_STATE': {
+          const fresh = await resetState(context);
+          postMsg(context, { type: 'STATE_RESPONSE', data: { state: fresh, __reqId: msg.data?.__reqId } });
           break;
         }
 

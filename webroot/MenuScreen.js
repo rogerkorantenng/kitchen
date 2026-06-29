@@ -35,6 +35,8 @@ const MenuScreen = (() => {
       if (act === 'play') { window.SFX?.coin?.(); window.CHEF_CTRL?.beginGame(); hide(); }
       else if (act === 'leaderboard') { _view = 'leaderboard'; _render(); _fetchLeaderboard(); }
       else if (act === 'howto') { _view = 'howto'; _render(); }
+      else if (act === 'reset') { _view = 'reset'; _render(); }
+      else if (act === 'reset-confirm') { _doReset(); }
       else if (act === 'back') { _view = 'main'; _render(); }
     });
   }
@@ -46,11 +48,21 @@ const MenuScreen = (() => {
     window.setTimeout(() => { if (_lb === null && _view === 'leaderboard') { _lb = []; _render(); } }, 1800);
   }
 
+  // Wipe all saved progress and restart fresh. Server clears the save + drops the
+  // player from the leaderboard; reloading re-inits into a brand-new game.
+  function _doReset() {
+    try { send('RESET_STATE', {}); } catch (e) { /* dev/local — nothing persisted */ }
+    const el = _el();
+    if (el) el.innerHTML = `<div class="menu-root"><div class="lb-loading" style="color:#fff">Resetting…</div></div>`;
+    window.setTimeout(() => { try { location.reload(); } catch (e) { _view = 'main'; _render(); } }, 600);
+  }
+
   // ── views ──────────────────────────────────────────────────────────────────
   function _render() {
     const el = _el(); if (!el) return;
     if (_view === 'leaderboard') el.innerHTML = _leaderboardHTML();
     else if (_view === 'howto')  el.innerHTML = _howtoHTML();
+    else if (_view === 'reset')  el.innerHTML = _resetHTML();
     else el.innerHTML = _mainHTML();
   }
 
@@ -65,7 +77,31 @@ const MenuScreen = (() => {
           <button class="menu-btn lb"   data-act="leaderboard"><span class="mb-ico">🏆</span> Leaderboard</button>
           <button class="menu-btn htp"  data-act="howto"><span class="mb-ico">❓</span> How to Play</button>
         </div>
+        <button class="menu-reset" data-act="reset">⟲ Reset progress</button>
         <div class="menu-foot">Tap stations to cook · serve before customers leave</div>
+      </div>`;
+  }
+
+  function _resetHTML() {
+    return `
+      <div class="menu-root">
+        <div class="menu-panel">
+          <div class="menu-panel-head">
+            <div class="menu-panel-title">⟲ Reset Progress</div>
+            <button class="menu-panel-close" data-act="back">✕</button>
+          </div>
+          <div class="menu-panel-body">
+            <div class="lb-empty" style="padding:18px 6px 8px">
+              This erases <b>everything</b> — coins, station upgrades, hired staff,
+              kitchen expansions and your leaderboard score — and starts a brand-new game.
+              <br><br>This can't be undone.
+            </div>
+          </div>
+          <div class="menu-panel-foot" style="display:flex;gap:10px">
+            <button class="menu-btn" style="background:linear-gradient(135deg,#9ca3af,#6b7280);flex:1" data-act="back">Cancel</button>
+            <button class="menu-btn" style="background:linear-gradient(135deg,#ef4444,#b91c1c);flex:1" data-act="reset-confirm">Reset</button>
+          </div>
+        </div>
       </div>`;
   }
 

@@ -1,6 +1,6 @@
 import type { Context } from '@devvit/public-api';
 import type { SaveState } from '../../core/save-schema.js';
-import { migrateSave } from '../../core/save-schema.js';
+import { migrateSave, defaultState } from '../../core/save-schema.js';
 import { computeOfflineEarnings } from '../../core/economy.js';
 
 function stateKey(userId: string): string {
@@ -41,6 +41,17 @@ export async function saveState(context: Context, state: SaveState): Promise<voi
   const userId = context.userId ?? 'anon';
   state.lastSeen = Date.now();
   await context.redis.set(stateKey(userId), JSON.stringify(state));
+}
+
+// Wipe a player's progress back to a brand-new save, and drop them from the
+// coins leaderboard. Returns the fresh state so the client can reload into it.
+export async function resetState(context: Context): Promise<SaveState> {
+  const userId = context.userId ?? 'anon';
+  const fresh = defaultState();
+  fresh.lastSeen = Date.now();
+  await context.redis.set(stateKey(userId), JSON.stringify(fresh));
+  try { await context.redis.zRem('leaderboard:renown', [userId]); } catch { /* best-effort */ }
+  return fresh;
 }
 
 // Increment feast counter (cheap Redis op on every dish served — realtime publish batched separately)

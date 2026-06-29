@@ -209,6 +209,7 @@ const STATION_DEFS = {
   soda:    { kind: 'maker', emoji: '🥤', label: 'Soda',    makes: 'cola',   time: 800,  color: 0x0891b2 },
   coffee:  { kind: 'maker', emoji: '☕', label: 'Coffee',  makes: 'coffee', time: 1700, color: 0x6f4e37 },
   plate:   { kind: 'plate', emoji: '🍽️', label: 'Plate' },
+  trash:   { kind: 'trash', emoji: '🗑️', label: 'Trash' },   // drop ANY unwanted item here to discard it
 };
 
 // Assembly recipes — when a plate's contents match `need` (any order), it becomes `makes`.
@@ -231,11 +232,11 @@ const DISHES = {
 
 // Which stations exist at each kitchen tier (order = on-screen left→right, top→bottom).
 const KITCHEN_STATIONS = {
-  1: ['meat', 'grill', 'plate', 'buns', 'soda', 'coffee'],
-  2: ['meat', 'grill', 'plate', 'buns', 'potato', 'fryer', 'soda', 'coffee'],
-  3: ['meat', 'grill', 'plate', 'buns', 'potato', 'fryer', 'lettuce', 'soda', 'coffee'],
-  4: ['meat', 'sausage', 'grill', 'plate', 'plate', 'buns', 'potato', 'fryer', 'lettuce', 'soda', 'coffee'],
-  5: ['meat', 'sausage', 'grill', 'grill', 'plate', 'plate', 'buns', 'potato', 'fryer', 'lettuce', 'soda', 'coffee'],
+  1: ['meat', 'grill', 'plate', 'buns', 'soda', 'coffee', 'trash'],
+  2: ['meat', 'grill', 'plate', 'buns', 'potato', 'fryer', 'soda', 'coffee', 'trash'],
+  3: ['meat', 'grill', 'plate', 'buns', 'potato', 'fryer', 'lettuce', 'soda', 'coffee', 'trash'],
+  4: ['meat', 'sausage', 'grill', 'plate', 'plate', 'buns', 'potato', 'fryer', 'lettuce', 'soda', 'coffee', 'trash'],
+  5: ['meat', 'sausage', 'grill', 'grill', 'plate', 'plate', 'buns', 'potato', 'fryer', 'lettuce', 'soda', 'coffee', 'trash'],
 };
 
 // Customer order pools per tier (each entry = a list of dish ids).

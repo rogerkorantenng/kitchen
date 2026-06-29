@@ -68,6 +68,7 @@ const StationManager = (() => {
     else if (inst.defId === 'fryer') _artFryer(g, cx, cy, w, h);
     else if (inst.defId === 'coffee') _artCoffee(g, cx, cy, w, h);
     else if (inst.defId === 'soda') _artSoda(g, cx, cy, w, h);
+    else if (inst.kind === 'trash') _artTrash(g, cx, cy, w, h);
     else if (inst.kind === 'bin') _artBin(g, cx, cy, w, h);
     else if (inst.kind === 'plate') _artPlate(g, cx, cy, w, h);
     else _artGeneric(g, inst, cx, cy, w, h);
@@ -80,6 +81,15 @@ const StationManager = (() => {
     g.fillStyle(0x000000, 0.12);
     for (let i = 1; i < 4; i++) g.fillRect(L + w*0.08 + w*0.84*i/4, T + h*0.3, 2, h*0.56);
     g.fillStyle(0xfff3d6, 0.9); g.fillRoundedRect(L + w*0.2, T + h*0.12, w*0.6, h*0.2, 6);
+  }
+  function _artTrash(g, cx, cy, w, h) {
+    // a metal swing-top trash can — drop unwanted food here
+    g.fillStyle(0x6b7280, 1); g.fillRoundedRect(cx - w*0.3, cy - h*0.16, w*0.6, h*0.6, 6);   // body
+    g.fillStyle(0x808a99, 1); g.fillRoundedRect(cx - w*0.3, cy - h*0.16, w*0.6, h*0.12, 6);   // top sheen
+    g.fillStyle(0x000000, 0.12);                                                              // ridges
+    for (let i = 0; i < 4; i++) g.fillRect(cx - w*0.22 + i*w*0.14, cy - h*0.1, 2, h*0.5);
+    g.fillStyle(0x4b5563, 1); g.fillRoundedRect(cx - w*0.36, cy - h*0.26, w*0.72, h*0.12, 5); // lid
+    g.fillStyle(0x374151, 1); g.fillRoundedRect(cx - w*0.07, cy - h*0.36, w*0.14, h*0.08, 4); // handle knob
   }
   function _artPlate(g, cx, cy, w, h) {
     g.fillStyle(0xd8dde3, 1); g.fillEllipse(cx, cy + h*0.16, w*0.86, h*0.3);
@@ -219,6 +229,8 @@ const StationManager = (() => {
       }
       if (inst.dish) o.hint.setStroke('#16a34a', 3).setText('TAKE ✓').setVisible(true);
       else o.hint.setVisible(false);
+    } else if (inst.kind === 'trash') {
+      o.item.setVisible(false); if (o.icon) o.icon.clear(); o.hint.setVisible(false);
     } else { // cook / maker — render EVERY slot (see all 2/3/4 items, not just ×N)
       const scene = _scene();
       o.item.setVisible(false);
@@ -328,6 +340,7 @@ const StationManager = (() => {
 
   // ── Drop-target highlighting (during drag) ───────────────────────────────────
   function _canAccept(inst, item) {
+    if (inst.kind === 'trash') return !!item;                 // the bin takes anything you're holding
     if (inst.kind === 'cook') return canPlace(inst) && inst.def.accepts && !!inst.def.accepts[item];
     if (inst.kind === 'plate') return !inst.dish && inst.contents.length < 3 && !ITEMS[item]?.dish;
     return false;
@@ -343,9 +356,10 @@ const StationManager = (() => {
       const o = inst.objs; if (!o.glow) return;
       if (_canAccept(inst, item)) {
         const x = inst._cx - inst._w*0.6, y = inst._cy - inst._h*0.62, w = inst._w*1.2, h = inst._h*1.24;
+        const col = inst.kind === 'trash' ? 0xef4444 : 0x22c55e;   // red glow for the trash, green for cook/plate
         o.glow.clear();
-        o.glow.fillStyle(0x22c55e, 0.22); o.glow.fillRoundedRect(x, y, w, h, 14);
-        o.glow.lineStyle(3, 0x22c55e, 0.95); o.glow.strokeRoundedRect(x, y, w, h, 14);
+        o.glow.fillStyle(col, 0.22); o.glow.fillRoundedRect(x, y, w, h, 14);
+        o.glow.lineStyle(3, col, 0.95); o.glow.strokeRoundedRect(x, y, w, h, 14);
         o.glow.setVisible(true).setAlpha(0.6);
         if (scene && !o._glowTween) o._glowTween = scene.tweens.add({ targets: o.glow, alpha: 1, duration: 380, yoyo: true, repeat: -1 });
       } else _clearGlow(inst);
@@ -380,6 +394,7 @@ const StationManager = (() => {
 
   // remove & return an item that can be picked up here (null if none)
   function takeFrom(inst) {
+    if (inst.kind === 'trash') return null;                   // nothing to pick up from the bin
     if (inst.kind === 'bin') return inst.def.gives;
     if (inst.kind === 'plate') {
       if (inst.dish) { const d = inst.dish; inst.dish = null; _refresh(inst); return d; }
@@ -406,6 +421,14 @@ const StationManager = (() => {
 
   // try to place `item` into a station; returns true if consumed
   function putTo(inst, item) {
+    if (inst.kind === 'trash') {                              // discard whatever's held — always succeeds
+      window.SFX?.place();
+      const o = inst.objs, scene = _scene();
+      if (o?.body && scene) scene.tweens.add({ targets: o.body, scaleX: 1.08, scaleY: 0.92, duration: 110, yoyo: true });
+      scene?.showFloatText(inst._cx, inst._cy - inst._h * 0.5, '🗑️ Tossed', '#ef4444', 12);
+      if (window.PARTICLE_FX?.upgradeSlamBurst) window.PARTICLE_FX.upgradeSlamBurst(inst._cx, inst._cy);
+      return true;
+    }
     if (inst.kind === 'cook') return startCook(inst, item);
     if (inst.kind === 'plate') {
       if (inst.dish || inst.contents.length >= 3 || ITEMS[item]?.dish) return false;

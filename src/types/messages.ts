@@ -5,6 +5,7 @@ export type WebViewMessage =
   | { type: 'INIT'; data?: { anonId?: string } }
   | { type: 'GET_STATE' }
   | { type: 'SAVE_STATE'; data: { state: SaveState } }
+  | { type: 'RESET_STATE'; data?: { __reqId?: number } }
   | { type: 'GET_CRAVINGS' }
   | { type: 'BUY_UPGRADE'; data: { stationId: string; __reqId?: number } }
   | { type: 'BUY_NEW_STATION'; data: { stationType: string; __reqId?: number } }
