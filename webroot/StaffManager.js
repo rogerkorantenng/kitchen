@@ -81,9 +81,9 @@ const StaffManager = (() => {
     // cooks run their assigned station
     _staff.filter(s => s.role === 'cook').forEach(s => {
       const inst = stMgr.getStations().find(i => i.id === s.stationId);
-      if (!inst) return;
-      if (inst.kind === 'maker' && inst.state === 'idle') stMgr.startMake(inst);
-      else if (inst.kind === 'cook' && inst.state === 'idle') {
+      if (!inst || !stMgr.canPlace(inst)) return;
+      if (inst.kind === 'maker') stMgr.startMake(inst);
+      else if (inst.kind === 'cook') {
         const accepts = Object.keys(inst.def.accepts || {});
         const bin = stMgr.getStations().find(b => b.kind === 'bin' && accepts.includes(b.def.gives));
         if (bin) stMgr.startCook(inst, bin.def.gives);

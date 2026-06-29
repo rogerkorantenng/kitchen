@@ -118,11 +118,11 @@ const ShopScreen = (() => {
     const cost = stMgr.getUpgradeCost(st);
     const maxed = st.level >= 3;
     const can = _coins >= cost && !maxed;
-    const next = maxed ? 'Fully upgraded' : 'Faster cooking';
+    const next = maxed ? `Max — makes ${st.level + 1} at once` : `Make ${st.level + 2} at once`;
     return `<div class="shop-card ${can?'aff':''}">
       <div class="shop-icon orange">${meta.emoji}</div>
       <div class="shop-info">
-        <div class="shop-name">${meta.label}</div>
+        <div class="shop-name">${meta.label} <span style="opacity:.7;font-weight:600">·×${st.level + 1}</span></div>
         <div class="shop-desc orange">Next: ${next}</div>
         <div class="shop-pips">${[0,1,2].map(i=>`<i class="${i<st.level?'on':''}"></i>`).join('')}</div>
       </div>

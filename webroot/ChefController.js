@@ -96,7 +96,7 @@ const ChefController = (() => {
     if (_hand == null && t && t.kind === 'station') {
       const item = stMgr.takeFrom(t.inst);
       if (item) { _setHand(item); _dragging = true; scene.showGhost(ITEMS[item].emoji); scene.moveGhost(p.x, p.y); window.SFX?.pickup(); }
-      else if (t.inst.kind === 'maker' && t.inst.state === 'idle') { stMgr.startMake(t.inst); window.SFX?.place(); }
+      else if (t.inst.kind === 'maker' && stMgr.canPlace(t.inst)) { stMgr.startMake(t.inst); window.SFX?.place(); }
     } else {
       _dragging = false;
     }
