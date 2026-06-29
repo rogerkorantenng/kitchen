@@ -194,10 +194,30 @@ const StationManager = (() => {
         o.item.setText(inst.def.emoji).setVisible(true).setY(inst._cy - inst._h*0.18);
       }
     } else if (inst.kind === 'plate') {
-      if (inst.dish) { o.item.setText(ITEMS[inst.dish].emoji).setVisible(true); o.hint.setStroke('#16a34a', 3).setText('TAKE ✓').setVisible(true); }
-      else if (inst.contents.length) o.item.setText(inst.contents.map(c => ITEMS[c].emoji).join('')).setVisible(true);
-      else o.item.setText('').setVisible(false);
-      o.item.setY(inst._cy - inst._h*0.06);
+      const scene = _scene();
+      o.item.setVisible(false);
+      if (!o.items) o.items = [];
+      const list = inst.dish ? [{ emoji: ITEMS[inst.dish].emoji, dish: true }]
+                             : inst.contents.map(c => ({ emoji: ITEMS[c].emoji }));
+      const n = list.length, total = Math.max(n, o.items.length);
+      for (let i = 0; i < total; i++) {
+        if (i < n) {
+          if (!o.items[i] && scene) o.items[i] = scene.add.text(0, 0, '', { fontSize: '10px' }).setOrigin(0.5).setDepth(24);
+          const t = o.items[i]; if (!t) continue;
+          if (scene) scene.tweens.killTweensOf(t);
+          t.clearTint();
+          if (list[i].dish) {
+            t.setText(list[i].emoji).setFontSize(Math.round(inst._w * 0.44)).setPosition(inst._cx, inst._cy - inst._h * 0.04).setVisible(true);
+            if (scene) scene.tweens.add({ targets: t, y: inst._cy - inst._h * 0.2, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+          } else {
+            // stack: first added sits lowest, later items pile on top
+            const y = inst._cy + inst._h * 0.06 - i * inst._h * 0.16;
+            t.setText(list[i].emoji).setFontSize(Math.round(inst._w * 0.34)).setPosition(inst._cx, y).setVisible(true);
+          }
+        } else if (o.items[i]) { if (scene) scene.tweens.killTweensOf(o.items[i]); o.items[i].setVisible(false); }
+      }
+      if (inst.dish) o.hint.setStroke('#16a34a', 3).setText('TAKE ✓').setVisible(true);
+      else o.hint.setVisible(false);
     } else { // cook / maker — render EVERY slot (see all 2/3/4 items, not just ×N)
       const scene = _scene();
       o.item.setVisible(false);
