@@ -172,6 +172,7 @@ const ChefController = (() => {
   }
 
   window.addEventListener('dk:custWalkout', () => { _setRep(_rep + REP_PER_WALKOUT); _combo = 0; window.SFX?.fail(); window.dispatchEvent(new CustomEvent('dk:comboChanged', { detail: { combo: 0 } })); });
+  window.addEventListener('dk:burnt', () => { _setRep(_rep - 1); });
 
   // ── Staff ────────────────────────────────────────────────────────────────────
   function _cookIds() { return _staff.filter(s => s.role === 'cook').map(s => s.stationId); }
