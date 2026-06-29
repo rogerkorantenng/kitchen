@@ -1,108 +1,110 @@
-// webroot/controls.js
-// HTML-based d-pad and action button controller.
-// Uses HTML touch events instead of Phaser input — more reliable in Devvit iframes.
-// Stops event propagation so Reddit page doesn't scroll.
+// webroot/controls.js — D-pad + Action button
+// HTML touch events, NOT Phaser — required for Devvit iframe reliability.
+//
+// THE SCROLL FIX:
+// Devvit iframes pass touchmove events to the Reddit parent, causing page scroll.
+// The ONLY fix is document-level touchmove preventDefault in the webroot document.
+// stopPropagation alone does NOT cross iframe boundaries.
 
-document.addEventListener('DOMContentLoaded', () => {
+(function() {
+  // ── NUCLEAR scroll prevention ────────────────────────────────────────────────
+  // Block ALL touchmove on this document. The webroot is a full-screen game —
+  // there is no legitimate scroll anywhere. This stops Reddit from scrolling.
+  document.addEventListener('touchmove', function(e) {
+    e.preventDefault();
+  }, { passive: false });
 
-  // ── D-pad ───────────────────────────────────────────────────────────────────
-  const dpadBtns = document.querySelectorAll('.dpad-btn');
-  const activeButtons = new Map(); // button element → { dx, dy, interval }
+  // Also block touchstart default (prevents 300ms click delay + some scroll initiation)
+  document.addEventListener('touchstart', function(e) {
+    // Don't preventDefault on all touchstart — breaks button tap detection.
+    // Only prevent on elements that are NOT interactive controls.
+    if (!e.target.closest('#controls-overlay') &&
+        !e.target.closest('#shop-overlay') &&
+        !e.target.closest('#hud-overlay')) {
+      // Game canvas area — prevent default scroll
+      e.preventDefault();
+    }
+  }, { passive: false });
 
-  function startMove(btn) {
-    if (activeButtons.has(btn)) return;
+
+  // ── D-pad state ───────────────────────────────────────────────────────────────
+  const held = new Set(); // active button elements
+  const intervals = new Map();
+
+  function moveChef(dx, dy) {
+    const scene = window.CHEF_SCENE;
+    if (!scene) return;
+    const dir = dx < 0 ? 'left' : dx > 0 ? 'right' : dy < 0 ? 'up' : 'down';
+    scene.chefDir = dir;
+    const nx = Math.max(20,          Math.min(scene.W - 20, scene.chefPos.x + dx * 14));
+    const ny = Math.max(scene.floorMinY || 120, Math.min(scene.H - 20,  scene.chefPos.y + dy * 8));
+    scene.chefPos.x = nx;
+    scene.chefPos.y = ny;
+    scene._drawChef(nx, ny, dir);
+    window.DK_CHEF_POS = { x: nx, y: ny };
+  }
+
+  function pressBtn(btn) {
+    if (held.has(btn)) return;
+    held.add(btn);
     const dx = parseInt(btn.dataset.dx, 10);
     const dy = parseInt(btn.dataset.dy, 10);
 
-    // Visual press
-    btn.style.background = 'rgba(249,115,22,0.7)';
-    btn.style.transform = btn.style.transform.replace('scale(1)','') + ' scale(0.92)';
-
-    // Notify ChefScene directly
-    const move = () => {
-      const scene = window.CHEF_SCENE;
-      if (!scene) return;
-      const stepX = dx * 16;
-      const stepY = dy * 9;
-      const dir   = dx < 0 ? 'left' : dx > 0 ? 'right' : dy < 0 ? 'up' : 'down';
-      scene.chefDir = dir;
-      const minY  = (scene.floorMinY || 0);
-      const nx    = Math.max(20, Math.min(scene.W - 20, scene.chefPos.x + stepX));
-      const ny    = Math.max(minY, Math.min(scene.H - 30, scene.chefPos.y + stepY));
-      scene.chefPos.x = nx;
-      scene.chefPos.y = ny;
-      scene._drawChef(nx, ny, dir);
-      window.DK_CHEF_POS = { x: nx, y: ny };
-    };
-
-    move(); // immediate first step
-    const iv = setInterval(move, 75); // repeat while held
-    activeButtons.set(btn, iv);
+    btn.classList.add('dpad-active');
+    moveChef(dx, dy);
+    intervals.set(btn, setInterval(() => moveChef(dx, dy), 70));
   }
 
-  function stopMove(btn) {
-    if (!activeButtons.has(btn)) return;
-    clearInterval(activeButtons.get(btn));
-    activeButtons.delete(btn);
-    // Reset visual
-    btn.style.background = 'rgba(255,255,255,0.22)';
-    btn.style.transform = '';
+  function releaseBtn(btn) {
+    if (!held.has(btn)) return;
+    held.delete(btn);
+    clearInterval(intervals.get(btn));
+    intervals.delete(btn);
+    btn.classList.remove('dpad-active');
   }
 
-  dpadBtns.forEach(btn => {
-    // Mouse events (desktop testing)
-    btn.addEventListener('mousedown', e => { e.stopPropagation(); e.preventDefault(); startMove(btn); });
-    btn.addEventListener('mouseup',   e => { e.stopPropagation(); stopMove(btn); });
-    btn.addEventListener('mouseleave',e => { stopMove(btn); });
-
-    // Touch events (mobile — the real platform)
-    btn.addEventListener('touchstart', e => {
-      e.stopPropagation();
-      e.preventDefault(); // CRITICAL: prevents Reddit page scroll
-      startMove(btn);
-    }, { passive: false });
-
-    btn.addEventListener('touchend', e => {
-      e.stopPropagation();
-      e.preventDefault();
-      stopMove(btn);
-    }, { passive: false });
-
-    btn.addEventListener('touchcancel', e => { stopMove(btn); }, { passive: false });
-  });
-
-  // Stop all if pointer leaves window
-  window.addEventListener('mouseup', () => {
-    activeButtons.forEach((_, btn) => stopMove(btn));
-  });
-
-  // ── Action button ───────────────────────────────────────────────────────────
-  const actionBtn = document.getElementById('btn-action');
-  if (actionBtn) {
-    const pressAction = (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      actionBtn.style.transform = 'scale(0.90)';
-      actionBtn.style.boxShadow = '0 2px 8px rgba(249,115,22,0.3)';
-      window.setTimeout(() => {
-        actionBtn.style.transform = '';
-        actionBtn.style.boxShadow = '';
-      }, 120);
-      window.dispatchEvent(new CustomEvent('dk:interact'));
-    };
-
-    actionBtn.addEventListener('mousedown',  pressAction);
-    actionBtn.addEventListener('touchstart', e => pressAction(e), { passive: false });
+  function releaseAll() {
+    held.forEach(btn => releaseBtn(btn));
   }
 
-  // ── Block Reddit scroll on entire controls overlay ──────────────────────────
-  const overlay = document.getElementById('controls-overlay');
-  if (overlay) {
-    ['touchstart','touchmove','touchend','pointerdown'].forEach(evt => {
-      overlay.addEventListener(evt, e => {
+  document.addEventListener('DOMContentLoaded', function() {
+
+    // ── Wire d-pad buttons ──────────────────────────────────────────────────────
+    document.querySelectorAll('.dpad-btn').forEach(btn => {
+      btn.addEventListener('pointerdown', function(e) {
+        e.preventDefault();
         e.stopPropagation();
-        if (evt === 'touchmove') e.preventDefault();
-      }, { passive: false });
+        btn.setPointerCapture(e.pointerId); // keep tracking even if finger drifts
+        pressBtn(btn);
+      });
+
+      btn.addEventListener('pointerup', function(e) {
+        e.preventDefault();
+        releaseBtn(btn);
+      });
+
+      btn.addEventListener('pointercancel', function(e) {
+        releaseBtn(btn);
+      });
+
+      btn.addEventListener('pointerleave', function(e) {
+        // Only release if pointer is actually gone (not just moved to center)
+        if (!btn.hasPointerCapture(e.pointerId)) releaseBtn(btn);
+      });
     });
-  }
-});
+
+    window.addEventListener('pointerup', releaseAll);
+
+    // ── Action button ───────────────────────────────────────────────────────────
+    const actionBtn = document.getElementById('btn-action');
+    if (actionBtn) {
+      actionBtn.addEventListener('pointerdown', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        actionBtn.style.transform = 'scale(0.88)';
+        window.setTimeout(() => { actionBtn.style.transform = ''; }, 140);
+        window.dispatchEvent(new CustomEvent('dk:interact'));
+      });
+    }
+  });
+})();
