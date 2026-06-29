@@ -49,6 +49,15 @@
       transition:transform 0.08s;
     }
     .hud-shop:active { transform:scale(0.9); }
+    .hud-combo { font-size:12px; font-weight:900; color:#fb923c; height:14px; line-height:14px; transition:transform 0.12s; text-shadow:0 1px 3px rgba(0,0,0,0.5); }
+    .hud-goal {
+      display:flex; align-items:center; gap:8px; padding:4px 14px 6px;
+      background:linear-gradient(180deg,rgba(74,46,22,0.92),rgba(60,37,18,0.88));
+      border-bottom:2px solid rgba(249,115,22,0.5);
+    }
+    .hud-goal-track { flex:1; height:8px; background:rgba(0,0,0,0.32); border-radius:5px; overflow:hidden; box-shadow:inset 0 1px 2px rgba(0,0,0,0.3); }
+    .hud-goal-fill { height:100%; width:0%; border-radius:5px; transition:width 0.35s ease; background:linear-gradient(90deg,#f97316,#fbbf24); }
+    .hud-goal-label { font-size:10px; font-weight:800; color:#fde68a; white-space:nowrap; font-variant-numeric:tabular-nums; }
     .hud-rep { font-size:10px; letter-spacing:1px; }
     .hud-coins {
       display:flex; align-items:center; gap:4px;
@@ -106,6 +115,7 @@
     .shop-h-title { font-size:24px; font-weight:900; color:#f97316; text-shadow:0 2px 8px rgba(249,115,22,0.4); }
     .shop-h-earned { font-size:30px; font-weight:900; color:#fbbf24; margin:6px 0; text-shadow:0 2px 10px rgba(251,191,36,0.4); }
     .shop-h-stats { display:flex; justify-content:center; gap:16px; font-size:11px; color:#f0d2a8; }
+    .shop-h-goal { font-size:11px; font-weight:700; color:#fde68a; margin-top:5px; }
     .shop-avail-bar {
       display:flex; align-items:center; justify-content:space-between; padding:10px 18px;
       background:linear-gradient(90deg,#fffaf2,#fff3df); border-bottom:2px solid #e7d2ad;
@@ -168,8 +178,10 @@
   <script src="phaser.min.js"></script>
   <script src="rpc.js"></script>
   <script src="constants.js"></script>
+  <script src="Sounds.js"></script>
   <script src="InputManager.js"></script>
   <script src="Characters.js"></script>
+  <script src="DishArt.js"></script>
   <script src="ChefScene.js"></script>
   <script src="StationManager.js"></script>
   <script src="CustomerManager.js"></script>

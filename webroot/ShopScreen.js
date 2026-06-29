@@ -5,7 +5,7 @@
 
 const ShopScreen = (() => {
   let _coins = 0, _total = 0, _shiftEarned = 0, _served = 0, _rep = 60, _day = 1;
-  let _tier = 1, _mode = 'end';
+  let _tier = 1, _mode = 'end', _goalStars = 0, _goalAmt = 0;
   let _ups = { chefSpeed: 0, traySize: 0 };
 
   function _fmt(n) { n = Math.floor(n); return n >= 1e3 ? (n/1e3).toFixed(1)+'K' : String(n); }
@@ -19,6 +19,8 @@ const ShopScreen = (() => {
     _served = detail.served || 0;
     _rep = detail.rep != null ? detail.rep : _rep;
     _day = detail.day || _day;
+    _goalStars = detail.goalStars != null ? detail.goalStars : 0;
+    _goalAmt = detail.goal || 0;
     const el = document.getElementById('shop-overlay');
     if (!el) return;
     el.style.display = 'block';
@@ -53,8 +55,11 @@ const ShopScreen = (() => {
           <div class="shop-h-earned">🪙 ${_fmt(_mode === 'shift' ? _coins : _shiftEarned)}</div>
           <div class="shop-h-stats">
             <span>${_mode === 'shift' ? '⏸ Day ' + _day : '🍽 ' + _served + ' served'}</span>
-            <span>${'⭐'.repeat(stars)}${'☆'.repeat(5-stars)}</span>
+            <span>${_mode === 'shift'
+              ? '⭐'.repeat(stars) + '☆'.repeat(5 - stars)
+              : '⭐'.repeat(_goalStars) + '☆'.repeat(3 - _goalStars)}</span>
           </div>
+          ${_mode === 'shift' ? '' : `<div class="shop-h-goal">${_goalStars >= 3 ? 'Goal smashed! 🎉' : _goalStars > 0 ? 'Keep going!' : 'Goal missed'} &nbsp;🪙 ${_fmt(_shiftEarned)} / ${_fmt(_goalAmt)}</div>`}
         </div>
 
         <div class="shop-avail-bar">

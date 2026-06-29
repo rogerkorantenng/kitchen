@@ -177,14 +177,19 @@ const SHOP_UPGRADES = {
 
 // Items you can hold / place. dish:true means it can be served to a customer.
 const ITEMS = {
-  raw_patty: { emoji: '🥩', name: 'Raw patty' },
-  patty:     { emoji: '🍖', name: 'Grilled patty' },
-  bun:       { emoji: '🍞', name: 'Bun' },
-  raw_fries: { emoji: '🥔', name: 'Raw potato' },
-  fries:     { emoji: '🍟', name: 'Fries',  dish: true },
-  cola:      { emoji: '🥤', name: 'Cola',   dish: true },
-  coffee:    { emoji: '☕', name: 'Coffee', dish: true },
-  burger:    { emoji: '🍔', name: 'Burger', dish: true },
+  raw_patty:   { emoji: '🥩', name: 'Raw patty' },
+  patty:       { emoji: '🍖', name: 'Grilled patty' },
+  bun:         { emoji: '🍞', name: 'Bun' },
+  raw_fries:   { emoji: '🥔', name: 'Raw potato' },
+  fries:       { emoji: '🍟', name: 'Fries',  dish: true },
+  lettuce:     { emoji: '🥬', name: 'Lettuce' },
+  raw_sausage: { emoji: '🥓', name: 'Raw sausage' },
+  sausage:     { emoji: '🌭', name: 'Grilled sausage' },
+  cola:        { emoji: '🥤', name: 'Cola',   dish: true },
+  coffee:      { emoji: '☕', name: 'Coffee', dish: true },
+  burger:      { emoji: '🍔', name: 'Burger', dish: true },
+  hotdog:      { emoji: '🌭', name: 'Hot dog', dish: true },
+  salad:       { emoji: '🥗', name: 'Salad',  dish: true },
 };
 
 // Station definitions. kind: 'bin' | 'cook' | 'maker' | 'plate'
@@ -193,25 +198,32 @@ const ITEMS = {
 //   maker → tap to start; produces a finished drink/dish (no input needed)
 //   plate → drop items onto it; matching combos auto-assemble into a finished dish
 const STATION_DEFS = {
-  meat:   { kind: 'bin',   emoji: '🥩', label: 'Meat',   gives: 'raw_patty' },
-  buns:   { kind: 'bin',   emoji: '🍞', label: 'Buns',   gives: 'bun' },
-  potato: { kind: 'bin',   emoji: '🥔', label: 'Potato', gives: 'raw_fries' },
-  grill:  { kind: 'cook',  emoji: '🔥', label: 'Grill',  accepts: { raw_patty: 'patty' }, time: 3000, color: 0x8b2500 },
-  fryer:  { kind: 'cook',  emoji: '🍟', label: 'Fryer',  accepts: { raw_fries: 'fries' }, time: 2500, color: 0xb0820f },
-  soda:   { kind: 'maker', emoji: '🥤', label: 'Soda',   makes: 'cola',   time: 800,  color: 0x0891b2 },
-  coffee: { kind: 'maker', emoji: '☕', label: 'Coffee', makes: 'coffee', time: 1700, color: 0x6f4e37 },
-  plate:  { kind: 'plate', emoji: '🍽️', label: 'Plate' },
+  meat:    { kind: 'bin',   emoji: '🥩', label: 'Meat',    gives: 'raw_patty' },
+  buns:    { kind: 'bin',   emoji: '🍞', label: 'Buns',    gives: 'bun' },
+  potato:  { kind: 'bin',   emoji: '🥔', label: 'Potato',  gives: 'raw_fries' },
+  lettuce: { kind: 'bin',   emoji: '🥬', label: 'Lettuce', gives: 'lettuce' },
+  sausage: { kind: 'bin',   emoji: '🥓', label: 'Sausage', gives: 'raw_sausage' },
+  grill:   { kind: 'cook',  emoji: '🔥', label: 'Grill',   accepts: { raw_patty: 'patty', raw_sausage: 'sausage' }, time: 3000, color: 0x8b2500 },
+  fryer:   { kind: 'cook',  emoji: '🍟', label: 'Fryer',   accepts: { raw_fries: 'fries' }, time: 2500, color: 0xb0820f },
+  soda:    { kind: 'maker', emoji: '🥤', label: 'Soda',    makes: 'cola',   time: 800,  color: 0x0891b2 },
+  coffee:  { kind: 'maker', emoji: '☕', label: 'Coffee',  makes: 'coffee', time: 1700, color: 0x6f4e37 },
+  plate:   { kind: 'plate', emoji: '🍽️', label: 'Plate' },
 };
 
 // Assembly recipes — when a plate's contents match `need` (any order), it becomes `makes`.
+// (Keep recipe ingredient-sets non-overlapping so incremental adds aren't ambiguous.)
 const RECIPES = [
-  { need: ['patty', 'bun'], makes: 'burger' },
+  { need: ['patty', 'bun'],   makes: 'burger' },
+  { need: ['sausage', 'bun'], makes: 'hotdog' },
+  { need: ['lettuce'],        makes: 'salad' },
 ];
 
 // Finished dishes customers can order, with payout.
 const DISHES = {
   burger: { emoji: '🍔', coins: 16 },
+  hotdog: { emoji: '🌭', coins: 13 },
   fries:  { emoji: '🍟', coins: 7 },
+  salad:  { emoji: '🥗', coins: 9 },
   cola:   { emoji: '🥤', coins: 4 },
   coffee: { emoji: '☕', coins: 6 },
 };
@@ -220,16 +232,16 @@ const DISHES = {
 const KITCHEN_STATIONS = {
   1: ['meat', 'grill', 'plate', 'buns', 'soda', 'coffee'],
   2: ['meat', 'grill', 'plate', 'buns', 'potato', 'fryer', 'soda', 'coffee'],
-  3: ['meat', 'grill', 'plate', 'plate', 'buns', 'potato', 'fryer', 'soda', 'coffee'],
-  4: ['meat', 'grill', 'grill', 'plate', 'plate', 'buns', 'potato', 'fryer', 'soda', 'coffee'],
-  5: ['meat', 'grill', 'grill', 'plate', 'plate', 'plate', 'buns', 'potato', 'fryer', 'fryer', 'soda', 'coffee'],
+  3: ['meat', 'grill', 'plate', 'buns', 'potato', 'fryer', 'lettuce', 'soda', 'coffee'],
+  4: ['meat', 'sausage', 'grill', 'plate', 'plate', 'buns', 'potato', 'fryer', 'lettuce', 'soda', 'coffee'],
+  5: ['meat', 'sausage', 'grill', 'grill', 'plate', 'plate', 'buns', 'potato', 'fryer', 'lettuce', 'soda', 'coffee'],
 };
 
 // Customer order pools per tier (each entry = a list of dish ids).
 const ORDER_POOLS = {
   1: [['burger'], ['cola'], ['coffee'], ['burger', 'cola'], ['burger', 'coffee']],
   2: [['burger'], ['fries'], ['cola'], ['coffee'], ['burger', 'fries'], ['burger', 'cola'], ['fries', 'coffee']],
-  3: [['burger'], ['fries'], ['cola'], ['coffee'], ['burger', 'fries'], ['burger', 'cola'], ['burger', 'fries', 'cola']],
-  4: [['burger', 'fries'], ['burger', 'cola'], ['burger', 'fries', 'cola'], ['fries', 'coffee'], ['burger', 'fries', 'coffee']],
-  5: [['burger', 'fries', 'cola'], ['burger', 'fries', 'coffee'], ['burger', 'burger', 'fries'], ['burger', 'fries', 'cola', 'coffee']],
+  3: [['burger'], ['fries'], ['salad'], ['cola'], ['coffee'], ['burger', 'fries'], ['salad', 'cola'], ['burger', 'fries', 'cola']],
+  4: [['burger', 'fries'], ['hotdog'], ['hotdog', 'fries'], ['salad', 'coffee'], ['burger', 'fries', 'cola'], ['hotdog', 'cola']],
+  5: [['burger', 'fries', 'cola'], ['hotdog', 'fries', 'coffee'], ['burger', 'hotdog', 'fries'], ['burger', 'fries', 'salad', 'cola']],
 };

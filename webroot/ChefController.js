@@ -6,6 +6,7 @@
 const ChefController = (() => {
   let _hand = null;        // item id currently held in hand
   let _dragging = false;
+  let _combo = 0, _lastServe = 0, _goal = 0;
   let _coins = 0, _shiftCoins = 0, _served = 0;
   let _rep = 60, _day = 1, _kitchenTier = 1;
   let _shiftTimer = null, _shiftActive = false, _paused = false;
@@ -23,7 +24,12 @@ const ChefController = (() => {
     return m ? m.multiplier : 1;
   }
 
-  function _setHand(item) { _hand = item || null; window.CHEF_SCENE?.setHand(_hand ? ITEMS[_hand].emoji : null); }
+  function _setHand(item) {
+    _hand = item || null;
+    window.CHEF_SCENE?.setHand(_hand ? ITEMS[_hand].emoji : null);
+    if (_hand) { window.STATION_MGR?.setDropHighlight(_hand); window.CUSTOMER_MGR?.setServeHighlight(_hand); }
+    else { window.STATION_MGR?.clearDropHighlight(); window.CUSTOMER_MGR?.clearServeHighlight(); }
+  }
   function _updateCoins() { window.dispatchEvent(new CustomEvent('dk:coinsChanged', { detail: { coins: _coins, shiftCoins: _shiftCoins } })); }
   function _setRep(v) { _rep = Math.max(0, Math.min(100, v)); window.dispatchEvent(new CustomEvent('dk:repChanged', { detail: { rep: _rep } })); }
 
@@ -39,16 +45,25 @@ const ChefController = (() => {
     // animate the plated dish flying to the customer
     const tray = scene.trayCenter ? scene.trayCenter() : { cx: scene.W/2, cy: scene.H*0.9 };
     const fx = from ? from.x : tray.cx, fy = from ? from.y : tray.cy;
-    scene.flyDish(fx, fy, sp.x, sp.y + 8, ITEMS[dish]?.emoji || '🍽️', () => {
+    scene.flyDish(fx, fy, sp.x, sp.y + 8, dish, () => {
       if (res.complete && window.PARTICLE_FX) window.PARTICLE_FX.serveBurst(sp.x, sp.y);
     });
     if (!res.complete) return res;
+    // combo: consecutive serves within 8s build a multiplier
+    if (Date.now() - _lastServe > 8000) _combo = 0;
+    _combo++; _lastServe = Date.now();
+    const comboMult = Math.min(3, 1 + (_combo - 1) * 0.2);
     const craving = (res.order || []).reduce((m, t) => Math.max(m, _cravingMult(t)), 1);
-    const earned = Math.ceil(res.baseEarned * craving);
+    const perfect = res.speedFactor > 0.7;
+    let earned = Math.ceil(res.baseEarned * craving * comboMult * (perfect ? 1.25 : 1));
     _coins += earned; _shiftCoins += earned; _served++;
     _setRep(_rep + REP_PER_SERVE); _updateCoins();
+    window.SFX?.serve(_combo); if (perfect) window.SFX?.perfect();
     const bonus = craving > 1 ? ` ×${craving}🔥` : '';
     scene.showFloatText(sp.x, ly, `+${earned}🪙${bonus}`, '#fbbf24', 17);
+    if (_combo >= 2) scene.showFloatText(sp.x, ly - 22, `COMBO ×${_combo}`, '#f97316', 14);
+    if (perfect) scene.showFloatText(sp.x, ly - 40, '⭐ PERFECT', '#22c55e', 13);
+    window.dispatchEvent(new CustomEvent('dk:comboChanged', { detail: { combo: _combo } }));
     window.dispatchEvent(new CustomEvent('dk:coinEarned', { detail: { amount: earned, x: sp.x, y: ly } }));
     send('DISH_SERVED', { stationId: 'serve', category: (res.order && res.order[0]) || 'grill' });
     return res;
@@ -69,8 +84,8 @@ const ChefController = (() => {
     const t = _hit(p.x, p.y);
     if (_hand == null && t && t.kind === 'station') {
       const item = stMgr.takeFrom(t.inst);
-      if (item) { _setHand(item); _dragging = true; scene.showGhost(ITEMS[item].emoji); scene.moveGhost(p.x, p.y); }
-      else if (t.inst.kind === 'maker' && t.inst.state === 'idle') { stMgr.startMake(t.inst); }
+      if (item) { _setHand(item); _dragging = true; scene.showGhost(ITEMS[item].emoji); scene.moveGhost(p.x, p.y); window.SFX?.pickup(); }
+      else if (t.inst.kind === 'maker' && t.inst.state === 'idle') { stMgr.startMake(t.inst); window.SFX?.place(); }
     } else {
       _dragging = false;
     }
@@ -81,20 +96,22 @@ const ChefController = (() => {
     scene.hideGhost();
     if (_hand) {
       const t = _hit(p.x, p.y);
-      let ok = false;
+      let ok = false, rejected = false;
       if (t && t.kind === 'station') {
         ok = window.STATION_MGR.putTo(t.inst, _hand);
-        if (!ok && t.inst.kind === 'maker' && t.inst.state === 'idle') { /* makers take no input */ }
+        if (ok) window.SFX?.place(); else rejected = true;
       } else if (t && t.kind === 'customer') {
         if (ITEMS[_hand].dish && window.CUSTOMER_MGR.customerNeeds(t.cust.id, _hand)) {
           deliverDish(t.cust.id, _hand, { x: p.x, y: p.y }); ok = true;
         } else {
+          rejected = true;
           const need = t.cust.order.filter((d, j) => !t.cust.delivered[j]).map(d => DISHES[d]?.emoji || '?').join('');
           const sp = window.CUSTOMER_MGR.getServePoint(t.cust.id);
           if (sp) scene.showFloatText(sp.x, sp.y - 18, need ? 'Wants ' + need : '…', '#8b949e', 12);
         }
       }
       if (ok) _setHand(null);
+      else if (rejected) { window.SFX?.error(); scene.cameras.main.shake(70, 0.0022); scene.showFloatText(p.x, p.y - 14, '✗', '#ef4444', 14); }
     }
     _dragging = false;
   }
@@ -109,22 +126,29 @@ const ChefController = (() => {
   });
 
   // ── Shift / day ──────────────────────────────────────────────────────────────
+  function _computeGoal() { return Math.round((30 + 22 * _kitchenTier) * (1 + (_day - 1) * 0.3)); }
+  function _goalStars() {
+    const r = _goal > 0 ? _shiftCoins / _goal : 0;
+    return r >= 1 ? 3 : r >= 0.65 ? 2 : r >= 0.35 ? 1 : 0;
+  }
   function _finishShift() {
     _shiftActive = false; _paused = false;
     window.CUSTOMER_MGR?.stopSpawning();
     window.STAFF_MGR?.endShift();
-    window.dispatchEvent(new CustomEvent('dk:shiftEnded', { detail: { coins: _shiftCoins, total: _coins, served: _served, rep: _rep, day: _day } }));
+    window.dispatchEvent(new CustomEvent('dk:shiftEnded', { detail: {
+      coins: _shiftCoins, total: _coins, served: _served, rep: _rep, day: _day,
+      goal: _goal, goalStars: _goalStars() } }));
     _day++;
   }
   function startShift(tier) {
     _kitchenTier = tier || _kitchenTier;
-    _shiftActive = true; _paused = false; _shiftCoins = 0; _served = 0; _setHand(null);
+    _shiftActive = true; _paused = false; _shiftCoins = 0; _served = 0; _combo = 0; _goal = _computeGoal(); _setHand(null);
     window.STATION_MGR?.resetForNewShift();
     window.CUSTOMER_MGR?.startSpawning(_kitchenTier, _day);
     window.STAFF_MGR?.beginShift();
     const durationMs = (SHIFT_DURATIONS[_kitchenTier] || 70) * 1000;
     _endTime = Date.now() + durationMs;
-    window.dispatchEvent(new CustomEvent('dk:shiftStarted', { detail: { durationMs, day: _day, tier: _kitchenTier } }));
+    window.dispatchEvent(new CustomEvent('dk:shiftStarted', { detail: { durationMs, day: _day, tier: _kitchenTier, goal: _goal } }));
     if (_shiftTimer) clearTimeout(_shiftTimer);
     _shiftTimer = window.setTimeout(_finishShift, durationMs);
   }
@@ -147,7 +171,7 @@ const ChefController = (() => {
     window.dispatchEvent(new CustomEvent('dk:shiftResumed', { detail: { remainingMs: _remainingMs } }));
   }
 
-  window.addEventListener('dk:custWalkout', () => _setRep(_rep + REP_PER_WALKOUT));
+  window.addEventListener('dk:custWalkout', () => { _setRep(_rep + REP_PER_WALKOUT); _combo = 0; window.SFX?.fail(); window.dispatchEvent(new CustomEvent('dk:comboChanged', { detail: { combo: 0 } })); });
 
   // ── Staff ────────────────────────────────────────────────────────────────────
   function _cookIds() { return _staff.filter(s => s.role === 'cook').map(s => s.stationId); }

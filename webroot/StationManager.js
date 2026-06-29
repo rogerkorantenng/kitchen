@@ -23,15 +23,15 @@ const StationManager = (() => {
     ids.forEach((defId, i) => {
       counts[defId] = (counts[defId] || 0) + 1;
       const def = STATION_DEFS[defId];
-      const inst = {
+      _list.push({
         id: defId + '#' + counts[defId], defId, kind: def.kind, def,
         slotIndex: i, level: _levels[defId + '#' + counts[defId]] || 0,
         state: 'idle', item: null, output: null, cookStart: 0,
         contents: [], dish: null, objs: {},
-      };
-      _list.push(inst);
-      _draw(inst);
+      });
     });
+    // draw AFTER the list is fully built so gridSlots(_list.length) is the final size
+    _list.forEach(_draw);
   }
   function _relayout() { _list.forEach(inst => { _destroy(inst); _draw(inst); }); }
 
@@ -43,6 +43,7 @@ const StationManager = (() => {
     const s = _slot(inst);
     inst._cx = s.cx; inst._cy = s.cy; inst._w = s.w; inst._h = s.h;
     const o = {};
+    o.glow = scene.add.graphics().setDepth(18).setVisible(false);
     o.body = scene.add.graphics().setDepth(20);
     _drawBody(o.body, inst);
     o.label = scene.add.text(s.cx, s.cy + s.h * 0.6, inst.def.label.toUpperCase(), {
@@ -161,7 +162,37 @@ const StationManager = (() => {
   function _finish(inst) {
     inst.state = 'ready';
     _refresh(inst);
+    window.SFX?.ready();
+    const o = inst.objs, scene = _scene();
+    if (o.body && scene) scene.tweens.add({ targets: o.body, scaleX: 1.06, scaleY: 1.06, duration: 110, yoyo: true });
   }
+
+  // ── Drop-target highlighting (during drag) ───────────────────────────────────
+  function _canAccept(inst, item) {
+    if (inst.kind === 'cook') return inst.state === 'idle' && inst.def.accepts && !!inst.def.accepts[item];
+    if (inst.kind === 'plate') return !inst.dish && inst.contents.length < 3 && !ITEMS[item]?.dish;
+    return false;
+  }
+  function _clearGlow(inst) {
+    const o = inst.objs; if (!o.glow) return;
+    if (o._glowTween) { o._glowTween.remove(); o._glowTween = null; }
+    o.glow.clear(); o.glow.setAlpha(1).setVisible(false);
+  }
+  function setDropHighlight(item) {
+    const scene = _scene();
+    _list.forEach(inst => {
+      const o = inst.objs; if (!o.glow) return;
+      if (_canAccept(inst, item)) {
+        const x = inst._cx - inst._w*0.6, y = inst._cy - inst._h*0.62, w = inst._w*1.2, h = inst._h*1.24;
+        o.glow.clear();
+        o.glow.fillStyle(0x22c55e, 0.22); o.glow.fillRoundedRect(x, y, w, h, 14);
+        o.glow.lineStyle(3, 0x22c55e, 0.95); o.glow.strokeRoundedRect(x, y, w, h, 14);
+        o.glow.setVisible(true).setAlpha(0.6);
+        if (scene && !o._glowTween) o._glowTween = scene.tweens.add({ targets: o.glow, alpha: 1, duration: 380, yoyo: true, repeat: -1 });
+      } else _clearGlow(inst);
+    });
+  }
+  function clearDropHighlight() { _list.forEach(_clearGlow); }
 
   // ── Public model API ─────────────────────────────────────────────────────────
   function getStations() { return _list; }
@@ -174,7 +205,7 @@ const StationManager = (() => {
     const out = inst.def.accepts && inst.def.accepts[item];
     if (!out) return false;
     inst.state = 'cooking'; inst.item = item; inst.output = out; inst.cookStart = Date.now();
-    _refresh(inst);
+    _refresh(inst); window.SFX?.sizzle();
     window.setTimeout(() => { if (inst.state === 'cooking') _finish(inst); }, _cookMs(inst));
     return true;
   }
@@ -219,6 +250,7 @@ const StationManager = (() => {
     for (const r of RECIPES) {
       if (r.need.slice().sort().join(',') === have) {
         inst.contents = []; inst.dish = r.makes;
+        window.SFX?.assemble();
         if (window.PARTICLE_FX) window.PARTICLE_FX.upgradeSlamBurst(inst._cx, inst._cy);
         _scene()?.showFloatText(inst._cx, inst._cy - inst._h*0.6, ITEMS[r.makes].emoji + '!', '#22c55e', 16);
         return;
@@ -264,7 +296,7 @@ const StationManager = (() => {
 
   return { getStations, stationAt, startCook, startMake, takeFrom, putTo,
     servableSources, idleMakers, upgradableStations, getUpgradeCost, upgradeStation,
-    resetForNewShift, rebuildForTier, setCookStations };
+    setDropHighlight, clearDropHighlight, resetForNewShift, rebuildForTier, setCookStations };
 })();
 
 window.STATION_MGR = StationManager;

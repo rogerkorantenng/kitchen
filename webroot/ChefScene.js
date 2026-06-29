@@ -127,6 +127,15 @@ class ChefScene extends Phaser.Scene {
       g.fillStyle(0xffd98a, 1); g.fillEllipse(lx, ly + 6, 22, 10);
     }
 
+    // potted plants in the dining corners (life, away from customer slots)
+    [[W*0.045, 0x2e7d32], [W*0.955, 0x388e3c]].forEach(([px, leaf]) => {
+      const py = this.diningH - 6;
+      g.fillStyle(0xa9743f, 0.95); g.fillRoundedRect(px - 12, py - 20, 24, 22, { tl:2, tr:2, bl:8, br:8 });
+      g.fillStyle(0x8a5a30, 0.95); g.fillRect(px - 12, py - 20, 24, 5);
+      g.fillStyle(leaf, 0.9);
+      [[-9,-24],[9,-24],[0,-34],[-5,-18],[6,-18]].forEach(([ox, oy]) => g.fillEllipse(px + ox, py + oy, 16, 24));
+    });
+
     // ── Service ledge (counter customers stand behind) ──
     const ly0 = this.diningH;
     g.fillStyle(0x7a4a28, 1); g.fillRect(0, ly0, W, this.ledgeH);
@@ -191,21 +200,27 @@ class ChefScene extends Phaser.Scene {
   hideGhost() { if (this.ghost) this.ghost.setVisible(false); }
 
   // ─── Flying plated dish (the "serve" animation) ──────────────────────────────
-  flyDish(fromX, fromY, toX, toY, emoji, cb) {
+  flyDish(fromX, fromY, toX, toY, dishId, cb) {
     const plate = this.add.graphics().setDepth(3500).setPosition(fromX, fromY);
-    plate.fillStyle(0x000000, 0.15); plate.fillEllipse(0, 4, 34, 12);
-    plate.fillStyle(0xffffff, 1); plate.fillEllipse(0, 0, 32, 12);
-    plate.fillStyle(0xe6ebf0, 1); plate.fillEllipse(0, -1, 22, 8);
-    const food = this.add.text(fromX, fromY - 7, emoji, { fontSize: '22px' }).setOrigin(0.5).setDepth(3501);
-    const midX = (fromX + toX) / 2, midY = Math.min(fromY, toY) - 80;
+    plate.fillStyle(0x000000, 0.15); plate.fillEllipse(0, 5, 42, 14);
+    plate.fillStyle(0xffffff, 1); plate.fillEllipse(0, 0, 40, 15);
+    plate.fillStyle(0xe6ebf0, 1); plate.fillEllipse(0, -1, 28, 10);
+    let food;
+    if (window.DishArt && DishArt.has(dishId)) {
+      food = this.add.graphics().setDepth(3501).setPosition(fromX, fromY - 8);
+      DishArt.draw(food, 0, 0, 14, dishId);
+    } else {
+      food = this.add.text(fromX, fromY - 8, (window.ITEMS && ITEMS[dishId]?.emoji) || dishId || '🍽️', { fontSize: '24px' }).setOrigin(0.5).setDepth(3501);
+    }
+    const midX = (fromX + toX) / 2, midY = Math.min(fromY, toY) - 84;
     const ctrl = { t: 0 };
     this.tweens.add({
-      targets: ctrl, t: 1, duration: 440, ease: 'Sine.InOut',
+      targets: ctrl, t: 1, duration: 460, ease: 'Sine.InOut',
       onUpdate: () => {
         const t = ctrl.t, it = 1 - t;
         const x = it*it*fromX + 2*it*t*midX + t*t*toX;
         const y = it*it*fromY + 2*it*t*midY + t*t*toY;
-        plate.setPosition(x, y); food.setPosition(x, y - 7).setRotation(Math.sin(t * Math.PI) * 0.3);
+        plate.setPosition(x, y); food.setPosition(x, y - 8).setRotation(Math.sin(t * Math.PI) * 0.25);
       },
       onComplete: () => {
         this.tweens.add({ targets: [plate, food], scaleX: 1.3, scaleY: 1.3, alpha: 0, duration: 220,

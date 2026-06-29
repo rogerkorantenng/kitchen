@@ -163,6 +163,7 @@ const CustomerManager = (() => {
   function _destroy(id) {
     const c = _customers[id];
     if (c?.objs) {
+      if (c.objs._glowTween) { try { c.objs._glowTween.remove(); } catch (_) {} }
       Object.values(c.objs).forEach(o => { if (o && o.destroy) try { o.destroy(); } catch (_) {} });
       (c.objs._emo || []).forEach(o => { try { o?.destroy?.(); } catch (_) {} });
       (c.objs._chk || []).forEach(o => { try { o?.destroy?.(); } catch (_) {} });
@@ -201,6 +202,27 @@ const CustomerManager = (() => {
       return Math.abs(x - o._cx) <= o._hitW / 2 && y >= o._hitTop && y <= o._hitBot;
     }) || null;
   }
+
+  function _clearCustGlow(c) {
+    const o = c.objs; if (!o) return;
+    if (o._glowTween) { o._glowTween.remove(); o._glowTween = null; }
+    if (o.glow) { o.glow.clear(); o.glow.setVisible(false); }
+  }
+  function setServeHighlight(item) {
+    const scene = _scene(); if (!scene || !ITEMS[item]?.dish) { clearServeHighlight(); return; }
+    getCustomers().forEach(c => {
+      const o = c.objs; if (!o) return;
+      if (customerNeeds(c.id, item)) {
+        if (!o.glow) { o.glow = scene.add.graphics().setDepth(9); o.group.push(o.glow); }
+        o.glow.clear();
+        o.glow.fillStyle(0x22c55e, 0.16); o.glow.fillCircle(o._cx, o._hy, o._w * 0.52);
+        o.glow.lineStyle(4, 0x22c55e, 0.95); o.glow.strokeCircle(o._cx, o._hy, o._w * 0.52);
+        o.glow.setVisible(true).setAlpha(0.6);
+        if (!o._glowTween) o._glowTween = scene.tweens.add({ targets: o.glow, alpha: 1, duration: 380, yoyo: true, repeat: -1 });
+      } else _clearCustGlow(c);
+    });
+  }
+  function clearServeHighlight() { Object.values(_customers).forEach(_clearCustGlow); }
   function deliverItem(id, dish) {
     const c = _customers[id];
     if (!c || c.served || c.leaving) return { accepted: false };
@@ -226,7 +248,7 @@ const CustomerManager = (() => {
 
   window.addEventListener('dk:relayout', _relayout);
 
-  return { startSpawning, stopSpawning, pause, resume, getCustomers, customerAt, getServePoint, customerNeeds, matchesOrder, deliverItem, resetForNewShift };
+  return { startSpawning, stopSpawning, pause, resume, getCustomers, customerAt, getServePoint, customerNeeds, matchesOrder, deliverItem, setServeHighlight, clearServeHighlight, resetForNewShift };
 })();
 
 window.CUSTOMER_MGR = CustomerManager;
