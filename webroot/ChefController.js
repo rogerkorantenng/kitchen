@@ -236,6 +236,8 @@ const ChefController = (() => {
   function countStaff(role) { return _staff.filter(s => s.role === role).length; }
 
   // ── Accessors ────────────────────────────────────────────────────────────────
+  function isShiftActive() { return _shiftActive; }
+  function isPaused() { return _paused; }
   function getCoins() { return _coins; }
   function setCoins(n) { _coins = Math.max(0, Math.floor(n)); _updateCoins(); }
   function getTier() { return _kitchenTier; }
@@ -273,7 +275,7 @@ const ChefController = (() => {
     }, 1400);
   });
 
-  return { startShift, beginGame, endShift, pauseShift, resumeShift, deliverDish, getCoins, setCoins, getTier, getRep, getDay,
+  return { startShift, beginGame, endShift, pauseShift, resumeShift, isShiftActive, isPaused, deliverDish, getCoins, setCoins, getTier, getRep, getDay,
     setKitchenTier, upgradeChefSpeed, upgradeTraySize, hireCook, hireWaiter, getStaff, countStaff };
 })();
 

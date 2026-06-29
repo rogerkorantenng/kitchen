@@ -27,6 +27,7 @@ const HUD = (() => {
           <div id="hud-combo" class="hud-combo"></div>
         </div>
         <div class="hud-right">
+          <button id="hud-pause" class="hud-shop">⏸</button>
           <button id="hud-shop" class="hud-shop">🛒</button>
           <div class="hud-rc">
             <div id="hud-rep" class="hud-rep">⭐⭐⭐</div>
@@ -38,9 +39,11 @@ const HUD = (() => {
         <div class="hud-goal-track"><div id="hud-goal-fill" class="hud-goal-fill"></div></div>
         <span id="hud-goal-label" class="hud-goal-label">🎯 0 / 0</span>
       </div>`;
-    // CSP-safe: bind the shop button via addEventListener (no inline onclick)
+    // CSP-safe: bind the buttons via addEventListener (no inline onclick)
     const shopBtn = document.getElementById('hud-shop');
     if (shopBtn) shopBtn.addEventListener('click', () => window.dispatchEvent(new CustomEvent('dk:openShop')));
+    const pauseBtn = document.getElementById('hud-pause');
+    if (pauseBtn) pauseBtn.addEventListener('click', () => window.dispatchEvent(new CustomEvent('dk:pauseMenu')));
   }
 
   let _goal = 0, _shiftCoins = 0;

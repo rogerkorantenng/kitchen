@@ -4,15 +4,27 @@
 // CSP-safe: no inline onclick — one delegated listener bound with addEventListener.
 
 const MenuScreen = (() => {
-  let _view = 'main';            // 'main' | 'leaderboard' | 'howto'
+  let _view = 'main';            // 'main' | 'leaderboard' | 'howto' | 'reset'
   let _me = '';                  // current player's username (for "YOU" highlight)
   let _lb = null;                // cached leaderboard entries (null = loading)
   let _shown = false;            // has the player left the menu yet this session?
+  let _inGame = false;           // opened as a pause menu mid-shift? (Play → Resume)
 
   function _el() { return document.getElementById('menu-overlay'); }
   function _fmt(n) { n = Math.floor(n || 0); return n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(n); }
 
   function show() {
+    const el = _el(); if (!el) return;
+    _shown = false; _view = 'main'; _inGame = false;
+    el.style.display = 'block';
+    _wire();
+    _render();
+  }
+  // Opened from the in-game Pause button: freeze the shift and show the menu.
+  // "Play" becomes "Resume" so the player drops right back into the same shift.
+  function showPause() {
+    const ctrl = window.CHEF_CTRL;
+    if (ctrl?.isShiftActive?.()) { ctrl.pauseShift?.(); _inGame = true; } else { _inGame = false; }
     const el = _el(); if (!el) return;
     _shown = false; _view = 'main';
     el.style.display = 'block';
@@ -32,7 +44,12 @@ const MenuScreen = (() => {
       const btn = ev.target.closest('[data-act]'); if (!btn) return;
       ev.preventDefault();
       const act = btn.dataset.act;
-      if (act === 'play') { window.SFX?.coin?.(); window.CHEF_CTRL?.beginGame(); hide(); }
+      if (act === 'play') {
+        window.SFX?.coin?.();
+        if (_inGame && window.CHEF_CTRL?.isPaused?.()) window.CHEF_CTRL.resumeShift();
+        else window.CHEF_CTRL?.beginGame();
+        _inGame = false; hide();
+      }
       else if (act === 'leaderboard') { _view = 'leaderboard'; _render(); _fetchLeaderboard(); }
       else if (act === 'howto') { _view = 'howto'; _render(); }
       else if (act === 'reset') { _view = 'reset'; _render(); }
@@ -67,18 +84,20 @@ const MenuScreen = (() => {
   }
 
   function _mainHTML() {
+    const playLabel = _inGame ? 'Resume' : 'Play';
+    const sub = _inGame ? '⏸ Paused' : 'Cook · Serve · Earn · Upgrade';
     return `
       <div class="menu-root">
         <div class="menu-logo">🍳</div>
         <div class="menu-title">DRIFT <span class="accent">KITCHEN</span></div>
-        <div class="menu-sub">Cook · Serve · Earn · Upgrade</div>
+        <div class="menu-sub">${sub}</div>
         <div class="menu-btns">
-          <button class="menu-btn play" data-act="play"><span class="mb-ico">▶</span> Play</button>
+          <button class="menu-btn play" data-act="play"><span class="mb-ico">▶</span> ${playLabel}</button>
           <button class="menu-btn lb"   data-act="leaderboard"><span class="mb-ico">🏆</span> Leaderboard</button>
           <button class="menu-btn htp"  data-act="howto"><span class="mb-ico">❓</span> How to Play</button>
         </div>
         <button class="menu-reset" data-act="reset">⟲ Reset progress</button>
-        <div class="menu-foot">Tap stations to cook · serve before customers leave</div>
+        <div class="menu-foot">${_inGame ? 'Resume to keep your current shift going' : 'Tap stations to cook · serve before customers leave'}</div>
       </div>`;
   }
 
@@ -183,6 +202,9 @@ const MenuScreen = (() => {
     _render();
   });
 
+  // In-game Pause button (HUD) opens this menu with the shift frozen.
+  window.addEventListener('dk:pauseMenu', showPause);
+
   // Show the menu as soon as the page is ready.
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', show);
@@ -190,7 +212,7 @@ const MenuScreen = (() => {
     show();
   }
 
-  return { show, hide };
+  return { show, showPause, hide };
 })();
 
 window.MENU_SCREEN = MenuScreen;
