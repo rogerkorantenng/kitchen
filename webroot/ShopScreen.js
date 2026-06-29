@@ -43,7 +43,7 @@ const ShopScreen = (() => {
 
   function _render(el) {
     const stMgr = window.STATION_MGR;
-    const stations = stMgr?.getStations() || [];
+    const stations = stMgr?.upgradableStations() || [];
     const stars = Math.max(0, Math.min(5, Math.round(_rep / 20)));
 
     el.innerHTML = `
@@ -85,18 +85,17 @@ const ShopScreen = (() => {
 
   function _stationCard(st) {
     const stMgr = window.STATION_MGR;
-    const meta = STATIONS[st.type];
-    const cost = stMgr.getUpgradeCost(st.id);
-    const maxed = st.level >= 4;
+    const meta = STATION_DEFS[st.defId];
+    const cost = stMgr.getUpgradeCost(st);
+    const maxed = st.level >= 3;
     const can = _coins >= cost && !maxed;
-    const descs = ['Basic','Faster −20%','Quick cook','×2 value','Gold ✦ −30%'];
-    const next = maxed ? 'Fully upgraded' : (descs[st.level + 1] || 'Upgrade');
+    const next = maxed ? 'Fully upgraded' : 'Faster cooking';
     return `<div class="shop-card ${can?'aff':''}">
       <div class="shop-icon orange">${meta.emoji}</div>
       <div class="shop-info">
         <div class="shop-name">${meta.label}</div>
         <div class="shop-desc orange">Next: ${next}</div>
-        <div class="shop-pips">${[0,1,2,3,4].map(i=>`<i class="${i<=st.level?'on':''}"></i>`).join('')}</div>
+        <div class="shop-pips">${[0,1,2].map(i=>`<i class="${i<st.level?'on':''}"></i>`).join('')}</div>
       </div>
       <button onclick="window._shopUpgSt('${st.id}')" class="shop-buy ${can?'':'off'}" ${can?'':'disabled'}>
         ${maxed ? '✓ MAX' : '🪙 '+_fmt(cost)}</button>
@@ -127,9 +126,9 @@ const ShopScreen = (() => {
     const waiterCount = staff.filter(s => s.role === 'waiter').length;
 
     let html = '';
-    // one cook per station (auto-cook)
+    // one cook per cook/maker station (auto-runs it)
     stations.forEach(st => {
-      const meta = STATIONS[st.type];
+      const meta = STATION_DEFS[st.defId];
       const hired = cookStations.has(st.id);
       const cost = Math.floor(STAFF.cook.baseCost * Math.pow(STAFF.cook.costMult, cookCount));
       const can = !hired && _coins >= cost;
@@ -237,7 +236,7 @@ const ShopScreen = (() => {
     const cookStations = new Set(staff.filter(s => s.role === 'cook').map(s => s.stationId));
     const waiters = staff.filter(s => s.role === 'waiter').length;
     const stations = (window.STATION_MGR?.getStations() || []).map((st, i) => ({
-      id: st.id, x: i, y: 0, stationType: st.type, level: st.level,
+      id: st.id, x: i, y: 0, stationType: st.defId, level: st.level,
       hasCook: cookStations.has(st.id), hasServer: false,
     }));
     const crew = Array.from({ length: waiters }, (_, i) => ({

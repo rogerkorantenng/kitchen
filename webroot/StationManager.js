@@ -1,260 +1,270 @@
-// webroot/StationManager.js — FRONT-FACING cooking stations on the kitchen line.
-// Tap a station to cook; when ready a plated dish appears to tap-and-plate.
-// Keeps the cook state machine (cooking/ready/level) — only the visuals are face-on.
+// webroot/StationManager.js — FRONT-FACING kitchen with a real food-assembly model.
+//   bin   → infinite source of a raw/base item (tap/drag to grab)
+//   cook  → place a raw item; it cooks ON the machine into a cooked item
+//   maker → tap to start; brews a finished drink (coffee / soda)
+//   plate → drop items; matching combos auto-assemble into a finished dish
+//
+// Interaction is driven by ChefController via takeFrom()/putTo()/startMake().
+// Stations expose their screen rect so the controller can hit-test taps & drags.
 
 const StationManager = (() => {
-  const _stations = {};
+  let _list = [];          // ordered station instances
   let _kitchenTier = 1;
-  let _total = 1;
-  const _savedLevels = {};
-  let _cookStations = new Set();
+  const _levels = {};      // stable id -> upgrade level (cook/maker speed)
 
   function _scene() { return window.CHEF_SCENE; }
 
   function _init(tier) {
     _kitchenTier = tier;
-    Object.keys(_stations).forEach(id => _destroyStation(id));
-    const layout = STATION_LAYOUT[tier] || STATION_LAYOUT[1];
-    _total = layout.length;
-    layout.forEach((type, i) => {
-      _stations[type] = {
-        id: type, type, slotIndex: i, level: _savedLevels[type] || 0,
-        cooking: false, cookStart: 0, ready: false, objs: {},
+    _list.forEach(_destroy);
+    _list = [];
+    const ids = KITCHEN_STATIONS[tier] || KITCHEN_STATIONS[1];
+    const counts = {};
+    ids.forEach((defId, i) => {
+      counts[defId] = (counts[defId] || 0) + 1;
+      const def = STATION_DEFS[defId];
+      const inst = {
+        id: defId + '#' + counts[defId], defId, kind: def.kind, def,
+        slotIndex: i, level: _levels[defId + '#' + counts[defId]] || 0,
+        state: 'idle', item: null, output: null, cookStart: 0,
+        contents: [], dish: null, objs: {},
       };
-      _drawStation(_stations[type]);
+      _list.push(inst);
+      _draw(inst);
     });
   }
+  function _relayout() { _list.forEach(inst => { _destroy(inst); _draw(inst); }); }
 
-  function _relayout() {
-    Object.values(_stations).forEach(st => { _destroyStation(st.id); _drawStation(st); });
-  }
+  function _slot(inst) { return _scene().gridSlots(_list.length)[inst.slotIndex]; }
 
-  // ── Visuals ───────────────────────────────────────────────────────────────────
-  function _drawStation(st) {
+  // ── Drawing ─────────────────────────────────────────────────────────────────
+  function _draw(inst) {
     const scene = _scene(); if (!scene) return;
-    const slot = scene.stationSlot(st.slotIndex, _total);
-    const { cx, cy, w, h } = slot;
-    st._cx = cx; st._cy = cy; st._w = w; st._h = h;
-    const objs = {};
-
-    const body = scene.add.graphics().setDepth(20);
-    _drawAppliance(body, st.type, cx, cy, w, h, st.level);
-    objs.body = body;
-
-    // name label on the counter
-    objs.name = scene.add.text(cx, cy + h * 0.62, STATIONS[st.type].label.toUpperCase(), {
-      fontSize: Math.max(8, Math.round(w * 0.1)) + 'px', fontStyle: 'bold',
+    const s = _slot(inst);
+    inst._cx = s.cx; inst._cy = s.cy; inst._w = s.w; inst._h = s.h;
+    const o = {};
+    o.body = scene.add.graphics().setDepth(20);
+    _drawBody(o.body, inst);
+    o.label = scene.add.text(s.cx, s.cy + s.h * 0.6, inst.def.label.toUpperCase(), {
+      fontSize: Math.max(7, Math.round(s.w * 0.12)) + 'px', fontStyle: 'bold',
       color: '#5c3a1e', stroke: '#fff7ea', strokeThickness: 3,
     }).setOrigin(0.5).setDepth(22);
-
-    // level pips
-    objs.pips = scene.add.graphics().setDepth(22);
-    _drawPips(objs.pips, st, cx, cy, w, h);
-
-    // progress bar (front of station)
-    objs.prog = scene.add.graphics().setDepth(23).setVisible(false);
-
-    // ready dish + badge (above station)
-    objs.dish = scene.add.text(cx, cy - h * 0.62, STATIONS[st.type].emoji, {
-      fontSize: Math.round(w * 0.42) + 'px',
-    }).setOrigin(0.5).setDepth(25).setVisible(false);
-    objs.dishPlate = scene.add.graphics().setDepth(24).setVisible(false);
-    objs.ready = scene.add.text(cx, cy - h * 0.92, 'TAP ✓', {
-      fontSize: '10px', fontStyle: 'bold', color: '#fff', stroke: '#16a34a', strokeThickness: 3,
-    }).setOrigin(0.5).setDepth(26).setVisible(false);
-
-    // affordable-upgrade coin pulse
-    objs.upg = scene.add.text(cx + w * 0.42, cy - h * 0.5, '', {
-      fontSize: Math.round(w * 0.2) + 'px',
-    }).setOrigin(0.5).setDepth(24);
-
-    // tap zone
-    const zone = scene.add.zone(cx, cy, w * 1.05, h * 1.5).setInteractive().setDepth(27);
-    zone.on('pointerdown', () => window.dispatchEvent(new CustomEvent('dk:stationTapped', { detail: { id: st.id } })));
-    objs.zone = zone;
-
-    st.objs = objs;
-    if (st.ready) _showReady(st);
+    o.item = scene.add.text(s.cx, s.cy - s.h * 0.1, '', { fontSize: Math.round(s.w * 0.4) + 'px' }).setOrigin(0.5).setDepth(24);
+    o.hint = scene.add.text(s.cx, s.cy - s.h * 0.62, '', { fontSize: '9px', fontStyle: 'bold', color: '#fff', stroke: '#16a34a', strokeThickness: 3 }).setOrigin(0.5).setDepth(25).setVisible(false);
+    o.prog = scene.add.graphics().setDepth(23);
+    o.pips = scene.add.graphics().setDepth(22);
+    inst.objs = o;
+    _refresh(inst);
   }
 
-  function _drawPips(g, st, cx, cy, w, h) {
-    g.clear();
-    const n = 5, pw = w * 0.1, gap = pw * 0.4, total = n * pw + (n - 1) * gap;
-    let x = cx - total / 2;
-    const y = cy + h * 0.4;
-    for (let i = 0; i < n; i++) {
-      g.fillStyle(i <= st.level ? 0xf97316 : 0x000000, i <= st.level ? 1 : 0.18);
-      g.fillRoundedRect(x, y, pw, pw * 0.55, 2);
-      x += pw + gap;
+  function _drawBody(g, inst) {
+    const { _cx: cx, _cy: cy, _w: w, _h: h } = inst;
+    const L = cx - w/2, T = cy - h/2;
+    g.fillStyle(0x000000, 0.12); g.fillEllipse(cx, cy + h*0.46, w*0.92, h*0.16);
+    if (inst.kind === 'bin') {
+      g.fillStyle(0x8a5a30, 1); g.fillRoundedRect(L + w*0.08, T + h*0.28, w*0.84, h*0.6, 8);
+      g.fillStyle(0xa9743f, 1); g.fillRoundedRect(L + w*0.08, T + h*0.28, w*0.84, h*0.16, 8);
+      g.fillStyle(0x000000, 0.12);
+      for (let i = 1; i < 4; i++) g.fillRect(L + w*0.08 + w*0.84*i/4, T + h*0.3, 2, h*0.56);
+      g.fillStyle(0xfff3d6, 0.9); g.fillRoundedRect(L + w*0.2, T + h*0.12, w*0.6, h*0.2, 6); // ingredient tray
+    } else if (inst.kind === 'plate') {
+      g.fillStyle(0xd8dde3, 1); g.fillEllipse(cx, cy + h*0.16, w*0.86, h*0.3);
+      g.fillStyle(0xffffff, 1); g.fillEllipse(cx, cy + h*0.1, w*0.78, h*0.26);
+      g.fillStyle(0xeef1f4, 1); g.fillEllipse(cx, cy + h*0.07, w*0.5, h*0.16);
+    } else {
+      // cook / maker appliance
+      const col = inst.def.color || 0x9aa3ac;
+      g.fillStyle(0x9aa3ac, 1); g.fillRoundedRect(L, cy - h*0.06, w, h*0.56, 8);
+      g.fillStyle(0xb6bec6, 1); g.fillRoundedRect(L, cy - h*0.06, w, h*0.16, 8);
+      const c = Phaser.Display.Color.IntegerToColor(col);
+      g.fillStyle(col, 1); g.fillRoundedRect(L + w*0.06, T + h*0.06, w*0.88, h*0.4, 7);
+      g.fillStyle(0xffffff, 0.18); g.fillRoundedRect(L + w*0.1, T + h*0.1, w*0.8, h*0.12, 5);
+      if (inst.kind === 'cook') {
+        g.lineStyle(2, 0x000000, 0.25);
+        for (let i = 1; i < 5; i++) { const gx = L + w*0.1 + w*0.8*i/5; g.lineBetween(gx, T+h*0.12, gx, T+h*0.42); }
+      } else { // maker spout + cups
+        g.fillStyle(0x2b2f36, 1); g.fillRect(cx - w*0.04, T + h*0.42, w*0.08, h*0.1);
+        g.fillStyle(0xffffff, 0.8); g.fillRoundedRect(cx - w*0.16, T + h*0.5, w*0.1, h*0.08, 2); g.fillRoundedRect(cx + w*0.06, T + h*0.5, w*0.1, h*0.08, 2);
+      }
+    }
+    // emoji badge (what this station is)
+    if (inst.kind === 'bin') { /* big ingredient shown via item layer */ }
+  }
+
+  function _drawPips(inst) {
+    const g = inst.objs.pips; if (!g) return; g.clear();
+    if (inst.kind !== 'cook' && inst.kind !== 'maker') return;
+    const { _cx: cx, _cy: cy, _w: w, _h: h } = inst;
+    const n = 3, pw = w*0.1, gap = pw*0.4, total = n*pw + (n-1)*gap;
+    let x = cx - total/2; const y = cy + h*0.38;
+    for (let i = 0; i < n; i++) { g.fillStyle(i < inst.level ? 0xf97316 : 0x000000, i < inst.level ? 1 : 0.16); g.fillRoundedRect(x, y, pw, pw*0.5, 2); x += pw + gap; }
+  }
+
+  function _refresh(inst) {
+    const o = inst.objs; if (!o.item) return;
+    o.hint.setVisible(false); o.prog.clear();
+    _drawPips(inst);
+    if (inst.kind === 'bin') {
+      o.item.setText(inst.def.emoji).setVisible(true).setY(inst._cy - inst._h*0.18);
+    } else if (inst.kind === 'plate') {
+      if (inst.dish) { o.item.setText(ITEMS[inst.dish].emoji).setVisible(true); o.hint.setText('TAKE ✓').setVisible(true); }
+      else if (inst.contents.length) o.item.setText(inst.contents.map(c => ITEMS[c].emoji).join('')).setVisible(true);
+      else o.item.setText('').setVisible(false);
+      o.item.setY(inst._cy - inst._h*0.06);
+    } else { // cook / maker
+      o.item.setY(inst._cy - inst._h*0.12);
+      if (inst.state === 'ready') {
+        const it = inst.kind === 'cook' ? inst.output : inst.def.makes;
+        o.item.setText(ITEMS[it].emoji).setVisible(true);
+        o.hint.setText('TAKE ✓').setVisible(true);
+        const scene = _scene();
+        if (scene) { scene.tweens.killTweensOf(o.item); scene.tweens.add({ targets: o.item, y: inst._cy - inst._h*0.28, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.InOut' }); }
+      } else if (inst.state === 'cooking') {
+        o.item.setText(inst.kind === 'cook' ? ITEMS[inst.item].emoji : inst.def.emoji).setVisible(true);
+      } else {
+        const scene = _scene(); if (scene) scene.tweens.killTweensOf(o.item);
+        o.item.setText(inst.kind === 'maker' ? inst.def.emoji : '').setVisible(inst.kind === 'maker').setY(inst._cy - inst._h*0.12);
+      }
     }
   }
 
-  // Front-facing appliance art per type, inside box centred at (cx,cy) size w×h.
-  function _drawAppliance(g, type, cx, cy, w, h, level) {
-    const L = cx - w/2, R = cx + w/2, T = cy - h/2, B = cy + h/2;
-    const meta = STATIONS[type];
-
-    // cabinet base (shared)
-    g.fillStyle(0x000000, 0.14); g.fillEllipse(cx, B - h*0.02, w * 0.96, h * 0.16);
-    g.fillStyle(0x9aa3ac, 1); g.fillRoundedRect(L, cy - h*0.1, w, h*0.6, 8);
-    g.fillStyle(0xb6bec6, 1); g.fillRoundedRect(L, cy - h*0.1, w, h*0.18, 8);
-
-    const topY = cy - h*0.1;
-    if (type === 'grill') {
-      g.fillStyle(0x2c2c2c, 1); g.fillRoundedRect(L+ w*0.04, T + h*0.1, w*0.92, h*0.42, 7);
-      g.fillStyle(0xff5a1f, 0.25); g.fillRoundedRect(L+ w*0.08, T + h*0.14, w*0.84, h*0.34, 6);
-      g.lineStyle(2, 0x4a4a4a, 1);
-      for (let i = 1; i < 6; i++) { const gx = L + w*0.08 + (w*0.84) * i/6; g.lineBetween(gx, T+h*0.14, gx, T+h*0.48); }
-      // food
-      g.fillStyle(0x7a3b1d, 1); g.fillEllipse(cx - w*0.16, T+h*0.32, w*0.18, h*0.1);
-      g.fillStyle(0x7a3b1d, 1); g.fillEllipse(cx + w*0.16, T+h*0.34, w*0.18, h*0.1);
-    } else if (type === 'fryer') {
-      g.fillStyle(0xd7dde2, 1); g.fillRoundedRect(L+w*0.04, T+h*0.1, w*0.92, h*0.42, 7);
-      [-0.22, 0.22].forEach(o => {
-        g.fillStyle(0xe8b23a, 1); g.fillRoundedRect(cx + w*o - w*0.16, T+h*0.18, w*0.32, h*0.28, 4);
-        g.fillStyle(0xffd76a, 0.8); g.fillRoundedRect(cx + w*o - w*0.13, T+h*0.2, w*0.26, h*0.1, 3);
-        g.lineStyle(2, 0x9aa3ac, 1); g.lineBetween(cx + w*o, T+h*0.1, cx + w*o, T - h*0.02);
-      });
-    } else if (type === 'wok') {
-      g.fillStyle(0x1c1c1c, 1); g.fillRoundedRect(L+w*0.04, T+h*0.12, w*0.92, h*0.4, 8);
-      g.fillStyle(0xff6b00, 0.3); g.fillEllipse(cx, T+h*0.3, w*0.6, h*0.18);
-      g.fillStyle(0x2d2d2d, 1); g.fillEllipse(cx, T+h*0.28, w*0.56, h*0.22);
-      g.fillStyle(0xf97316, 0.8); g.fillEllipse(cx - w*0.06, T+h*0.26, w*0.12, h*0.06);
-      g.fillStyle(0x22c55e, 0.8); g.fillEllipse(cx + w*0.07, T+h*0.3, w*0.1, h*0.05);
-    } else if (type === 'drinks') {
-      g.fillStyle(0x0e7490, 1); g.fillRoundedRect(L+w*0.06, T+h*0.05, w*0.88, h*0.5, 8);
-      g.fillStyle(0x67e8f9, 0.9); g.fillRoundedRect(L+w*0.14, T+h*0.12, w*0.72, h*0.18, 4);
-      [-0.2,0,0.2].forEach((o,i) => { g.fillStyle([0xff6b6b,0xffd93d,0x6bcb77][i],1); g.fillCircle(cx+w*o, T+h*0.42, w*0.05); });
-      g.fillStyle(0x374151, 1); g.fillRect(cx - w*0.04, T+h*0.5, w*0.08, h*0.12);
-    } else if (type === 'bakery') {
-      g.fillStyle(0xead9bf, 1); g.fillRoundedRect(L+w*0.04, T+h*0.05, w*0.92, h*0.5, 8);
-      g.fillStyle(0x12131f, 0.9); g.fillRoundedRect(L+w*0.14, T+h*0.14, w*0.72, h*0.3, 6);
-      g.fillStyle(0xff9f43, 0.45); g.fillRoundedRect(L+w*0.17, T+h*0.17, w*0.66, h*0.24, 5);
-      g.fillStyle(0xffcf8a, 0.9); g.fillEllipse(cx - w*0.12, T+h*0.3, w*0.12, h*0.06);
-      g.fillStyle(0xffcf8a, 0.9); g.fillEllipse(cx + w*0.12, T+h*0.3, w*0.12, h*0.06);
-      g.fillStyle(0x8a8f96, 1); g.fillRoundedRect(L+w*0.2, T+h*0.47, w*0.6, h*0.04, 2);
-    } else if (type === 'prep') {
-      g.fillStyle(0xcdb088, 1); g.fillRoundedRect(L+w*0.06, T+h*0.16, w*0.88, h*0.36, 6);
-      g.fillStyle(0x22c55e, 0.95); g.fillEllipse(cx - w*0.2, T+h*0.3, w*0.12, h*0.07);
-      g.fillStyle(0xff6b6b, 0.95); g.fillEllipse(cx + w*0.04, T+h*0.32, w*0.11, h*0.07);
-      g.fillStyle(0xfbbf24, 0.95); g.fillEllipse(cx + w*0.22, T+h*0.28, w*0.1, h*0.06);
-      g.fillStyle(0xcfd6dd, 1); g.fillRect(cx - w*0.3, T+h*0.18, w*0.04, h*0.3);
-    } else if (type === 'smoker') {
-      g.fillStyle(0x1a0a00, 1); g.fillRoundedRect(L+w*0.06, T+h*0.08, w*0.88, h*0.48, 10);
-      g.lineStyle(2, 0x3d1a00, 1); g.lineBetween(L+w*0.06, cy-h*0.12, R-w*0.06, cy-h*0.12);
-      g.fillStyle(0xff4500, 0.7); g.fillEllipse(cx, T+h*0.22, w*0.4, h*0.08);
-      g.fillStyle(0x2d2d2d, 1); g.fillRect(R - w*0.2, T - h*0.02, w*0.08, h*0.18);
-    } else if (type === 'dessert') {
-      g.fillStyle(0xfce7f3, 1); g.fillRoundedRect(L+w*0.06, T+h*0.08, w*0.88, h*0.48, 10);
-      g.fillStyle(0xffffff, 1); g.fillEllipse(cx, T+h*0.34, w*0.5, h*0.1);
-      g.fillStyle(0xff85a1, 1); g.fillEllipse(cx, T+h*0.26, w*0.36, h*0.12);
-      g.fillStyle(0xffffff, 0.9); g.fillCircle(cx, T+h*0.2, w*0.05);
-    }
-
-    // gold trim at max level
-    if (level >= 4) { g.lineStyle(3, 0xfbbf24, 0.9); g.strokeRoundedRect(L, cy - h*0.1, w, h*0.6, 8); }
-    // glossy counter reflection
-    g.fillStyle(0xffffff, 0.08); g.fillRoundedRect(L, topY, w, h*0.06, 6);
+  function _destroy(inst) {
+    if (!inst.objs) return;
+    const scene = _scene();
+    Object.values(inst.objs).forEach(o => { try { scene?.tweens?.killTweensOf(o); o?.destroy?.(); } catch (_) {} });
+    inst.objs = {};
   }
 
-  function _destroyStation(id) {
-    const st = _stations[id]; if (!st?.objs) return;
-    Object.values(st.objs).forEach(o => { try { o?.destroy?.(); } catch (_) {} });
-    st.objs = {};
+  function _cookMs(inst) {
+    let ms = (inst.def.time || 3000) * (window._cookSpeedMult || 1);
+    if (inst.level >= 1) ms *= 0.8;
+    if (inst.level >= 2) ms *= 0.8;
+    return Math.max(350, ms);
   }
 
-  function _getCookMs(st) {
-    let ms = STATIONS[st.type]?.cookMs || 3000;
-    if (st.level >= 1) ms *= 0.82;
-    if (st.level >= 3) ms *= 0.8;
-    ms *= (window._cookSpeedMult || 1);   // "Prep Speed" shop upgrade
-    return Math.max(400, ms);
-  }
-
-  function _showReady(st) {
-    const scene = _scene(); const o = st.objs; if (!o.dish) return;
-    o.prog.setVisible(false);
-    o.dish.setVisible(true); o.ready.setVisible(true);
-    o.dishPlate.clear().setVisible(true);
-    o.dishPlate.fillStyle(0xffffff, 1);
-    o.dishPlate.fillEllipse(st._cx, st._cy - st._h * 0.52, st._w * 0.5, st._h * 0.13);
-    if (scene) scene.tweens.add({ targets: [o.dish], y: st._cy - st._h * 0.7, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
-  }
-  function _hideReady(st) {
-    const o = st.objs; if (!o.dish) return;
-    const scene = _scene(); if (scene) scene.tweens.killTweensOf(o.dish);
-    o.dish.setVisible(false); o.ready.setVisible(false); o.dishPlate.setVisible(false);
-    o.dish.setY(st._cy - st._h * 0.62);
-  }
-
-  // progress + steam tick
+  // progress tick
   setInterval(() => {
-    Object.values(_stations).forEach(st => {
-      const o = st.objs; if (!o.prog) return;
-      if (!st.cooking) { o.prog.setVisible(false); return; }
-      const pct = Math.min((Date.now() - st.cookStart) / _getCookMs(st), 1);
-      o.prog.setVisible(true).clear();
-      const w = st._w, x = st._cx - w*0.42, y = st._cy + st._h*0.28, bw = w*0.84;
-      o.prog.fillStyle(0x000000, 0.25); o.prog.fillRoundedRect(x, y, bw, 7, 3);
-      o.prog.fillStyle(0xf97316, 1); o.prog.fillRoundedRect(x, y, bw * pct, 7, 3);
-      if (pct > 0.25 && Math.random() < 0.16) {
-        const s = _scene()?.add.text(st._cx + (Math.random()-0.5)*st._w*0.4, st._cy - st._h*0.3, '〰️',
-          { fontSize: Math.round(st._w*0.16)+'px' }).setDepth(25).setAlpha(0.7);
-        if (s) _scene().tweens.add({ targets: s, y: s.y - 26, alpha: 0, duration: 700, onComplete: () => s.destroy() });
+    _list.forEach(inst => {
+      const o = inst.objs; if (!o.prog || inst.state !== 'cooking') return;
+      const pct = Math.min((Date.now() - inst.cookStart) / _cookMs(inst), 1);
+      o.prog.clear();
+      const w = inst._w, x = inst._cx - w*0.42, y = inst._cy + inst._h*0.26, bw = w*0.84;
+      o.prog.fillStyle(0x000000, 0.25); o.prog.fillRoundedRect(x, y, bw, 6, 3);
+      o.prog.fillStyle(0xf97316, 1); o.prog.fillRoundedRect(x, y, bw*pct, 6, 3);
+      if (pct > 0.25 && Math.random() < 0.14) {
+        const s = _scene()?.add.text(inst._cx + (Math.random()-0.5)*inst._w*0.4, inst._cy - inst._h*0.3, '〰️', { fontSize: Math.round(inst._w*0.16)+'px' }).setDepth(26).setAlpha(0.7);
+        if (s) _scene().tweens.add({ targets: s, y: s.y - 22, alpha: 0, duration: 650, onComplete: () => s.destroy() });
       }
     });
   }, 60);
 
-  // ── Public API ───────────────────────────────────────────────────────────────
-  function getStations() { return Object.values(_stations); }
-  function startCooking(id) {
-    const st = _stations[id];
-    if (!st || st.cooking || st.ready) return false;
-    st.cooking = true; st.cookStart = Date.now();
-    window.setTimeout(() => {
-      if (!_stations[id]) return;
-      st.ready = true; st.cooking = false; _showReady(st);
-    }, _getCookMs(st));
+  function _finish(inst) {
+    inst.state = 'ready';
+    _refresh(inst);
+  }
+
+  // ── Public model API ─────────────────────────────────────────────────────────
+  function getStations() { return _list; }
+  function stationAt(x, y) {
+    return _list.find(i => Math.abs(x - i._cx) <= i._w*0.6 && Math.abs(y - i._cy) <= i._h*0.75) || null;
+  }
+
+  function startCook(inst, item) {
+    if (inst.kind !== 'cook' || inst.state !== 'idle') return false;
+    const out = inst.def.accepts && inst.def.accepts[item];
+    if (!out) return false;
+    inst.state = 'cooking'; inst.item = item; inst.output = out; inst.cookStart = Date.now();
+    _refresh(inst);
+    window.setTimeout(() => { if (inst.state === 'cooking') _finish(inst); }, _cookMs(inst));
     return true;
   }
-  function isReady(id)   { return _stations[id]?.ready === true; }
-  function isCooking(id) { return _stations[id]?.cooking === true; }
-  function pickUp(id) {
-    const st = _stations[id];
-    if (!st?.ready) return null;
-    st.ready = false; _hideReady(st);
-    return st.type;
+  function startMake(inst) {
+    if (inst.kind !== 'maker' || inst.state !== 'idle') return false;
+    inst.state = 'cooking'; inst.cookStart = Date.now();
+    _refresh(inst);
+    window.setTimeout(() => { if (inst.state === 'cooking') _finish(inst); }, _cookMs(inst));
+    return true;
   }
-  function getUpgradeCost(id) {
-    const st = _stations[id]; if (!st) return Infinity;
-    return Math.floor((UPGRADE_BASE_COSTS[st.type] || 80) * Math.pow(1.8, st.level));
+
+  // remove & return an item that can be picked up here (null if none)
+  function takeFrom(inst) {
+    if (inst.kind === 'bin') return inst.def.gives;
+    if (inst.kind === 'plate') {
+      if (inst.dish) { const d = inst.dish; inst.dish = null; _refresh(inst); return d; }
+      if (inst.contents.length) { const c = inst.contents.pop(); _refresh(inst); return c; }
+      return null;
+    }
+    if (inst.state === 'ready') {
+      const it = inst.kind === 'cook' ? inst.output : inst.def.makes;
+      inst.state = 'idle'; inst.item = null; inst.output = null; _refresh(inst);
+      return it;
+    }
+    return null;
+  }
+
+  // try to place `item` into a station; returns true if consumed
+  function putTo(inst, item) {
+    if (inst.kind === 'cook') return startCook(inst, item);
+    if (inst.kind === 'plate') {
+      if (inst.dish || inst.contents.length >= 3 || ITEMS[item]?.dish) return false;
+      inst.contents.push(item);
+      _checkRecipe(inst); _refresh(inst);
+      return true;
+    }
+    return false;
+  }
+
+  function _checkRecipe(inst) {
+    const have = inst.contents.slice().sort().join(',');
+    for (const r of RECIPES) {
+      if (r.need.slice().sort().join(',') === have) {
+        inst.contents = []; inst.dish = r.makes;
+        if (window.PARTICLE_FX) window.PARTICLE_FX.upgradeSlamBurst(inst._cx, inst._cy);
+        _scene()?.showFloatText(inst._cx, inst._cy - inst._h*0.6, ITEMS[r.makes].emoji + '!', '#22c55e', 16);
+        return;
+      }
+    }
+  }
+
+  // Finished dishes available to grab (for auto-waiters): plates with a dish + ready makers
+  function servableSources() {
+    const out = [];
+    _list.forEach(inst => {
+      if (inst.kind === 'plate' && inst.dish) out.push({ inst, dish: inst.dish });
+      else if (inst.kind === 'maker' && inst.state === 'ready') out.push({ inst, dish: inst.def.makes });
+      else if (inst.kind === 'cook' && inst.state === 'ready' && ITEMS[inst.output]?.dish) out.push({ inst, dish: inst.output });
+    });
+    return out;
+  }
+  function idleMakers() { return _list.filter(i => i.kind === 'maker' && i.state === 'idle'); }
+
+  // ── Upgrades (cook/maker speed) ──────────────────────────────────────────────
+  function upgradableStations() { return _list.filter(i => i.kind === 'cook' || i.kind === 'maker'); }
+  function getUpgradeCost(instOrId) {
+    const inst = typeof instOrId === 'string' ? _list.find(i => i.id === instOrId) : instOrId;
+    if (!inst) return Infinity;
+    const base = inst.kind === 'cook' ? 90 : 60;
+    return Math.floor(base * Math.pow(1.9, inst.level));
   }
   function upgradeStation(id) {
-    const st = _stations[id];
-    if (!st || st.level >= 4) return;
-    st.level++; _savedLevels[id] = st.level;
-    _destroyStation(id); _drawStation(st);
-    if (window.PARTICLE_FX) window.PARTICLE_FX.upgradeSlamBurst(st._cx, st._cy);
-    _scene()?.showFloatText(st._cx, st._cy - st._h*0.8, '⬆ Upgraded!', '#fbbf24');
+    const inst = _list.find(i => i.id === id); if (!inst || inst.level >= 3) return;
+    inst.level++; _levels[inst.id] = inst.level; _refresh(inst);
+    if (window.PARTICLE_FX) window.PARTICLE_FX.upgradeSlamBurst(inst._cx, inst._cy);
   }
-  function updateUpgradeIcons(coins) {
-    Object.values(_stations).forEach(st => {
-      if (!st.objs.upg) return;
-      st.objs.upg.setText(coins >= getUpgradeCost(st.id) && st.level < 4 ? '💰' : '');
-    });
-  }
-  function setCookStations(ids) { _cookStations = new Set(ids || []); }
+
   function resetForNewShift() {
-    Object.values(_stations).forEach(st => { st.cooking = false; st.ready = false; _hideReady(st); });
+    _list.forEach(inst => { inst.state = 'idle'; inst.item = null; inst.output = null; inst.contents = []; inst.dish = null; _refresh(inst); });
   }
   function rebuildForTier(tier) { _init(tier); }
+  function setCookStations() { /* badges handled by visible cook avatars */ }
 
   window.addEventListener('dk:sceneReady',     () => _init(_kitchenTier));
   window.addEventListener('dk:kitchenRebuilt', (ev) => _init(ev.detail.tier));
   window.addEventListener('dk:relayout',       () => _relayout());
 
-  return { getStations, startCooking, isReady, isCooking, pickUp, getUpgradeCost,
-    upgradeStation, updateUpgradeIcons, setCookStations, resetForNewShift, rebuildForTier };
+  return { getStations, stationAt, startCook, startMake, takeFrom, putTo,
+    servableSources, idleMakers, upgradableStations, getUpgradeCost, upgradeStation,
+    resetForNewShift, rebuildForTier, setCookStations };
 })();
 
 window.STATION_MGR = StationManager;

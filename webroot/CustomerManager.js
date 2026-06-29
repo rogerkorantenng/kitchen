@@ -30,14 +30,8 @@ const CustomerManager = (() => {
 
   function _spawnOne() {
     if (!_scene()) return;
-    const pools = ['basic'];
-    if (_kitchenTier >= 2) pools.push('full');
-    if (_kitchenTier >= 4) pools.push('premium');
-    const pool = COMBOS[pools[Math.floor(Math.random()*pools.length)]] || COMBOS.basic;
-    const stationIds = (window.STATION_MGR?.getStations() || []).map(s => s.id);
-    const valid = pool.filter(c => c.every(t => stationIds.includes(t)));
-    if (!valid.length) return;
-    const order = valid[Math.floor(Math.random()*valid.length)].slice();
+    const pool = ORDER_POOLS[Math.min(5, _kitchenTier)] || ORDER_POOLS[1];
+    const order = pool[Math.floor(Math.random() * pool.length)].slice();
 
     const used = new Set(getCustomers().map(c => c.slot));
     const free = [];
@@ -113,10 +107,7 @@ const CustomerManager = (() => {
     objs.bar = scene.add.graphics().setDepth(15);
 
     objs.group = [objs.body, objs.face, objs.ticket, objs.bar];
-    const zone = scene.add.zone(cx, (hy + ledge) / 2, w * 1.1, (ledge - hy) + w*0.6).setInteractive().setDepth(16);
-    zone.on('pointerdown', () => window.dispatchEvent(new CustomEvent('dk:customerTapped', { detail: { id: cust.id } })));
-    objs.zone = zone;
-
+    objs._hitW = w * 1.2; objs._hitTop = hy - w * 0.5; objs._hitBot = ledge + w * 0.1;
     cust.objs = objs;
   }
 
@@ -134,7 +125,7 @@ const CustomerManager = (() => {
     g.fillStyle(0xfffaf0, 1); g.fillTriangle(cx - 7, ty + th, cx + 7, ty + th, cx, ty + th + 10);
     cust.order.forEach((type, i) => {
       const ex = cx - (n*cell)/2 + i*cell + cell/2, ey = ty + th/2 + 2;
-      if (!o._emo[i]) o._emo[i] = scene.add.text(ex, ey, STATIONS[type]?.emoji || '?',
+      if (!o._emo[i]) o._emo[i] = scene.add.text(ex, ey, DISHES[type]?.emoji || '?',
         { fontSize: Math.round(cell*0.62) + 'px' }).setOrigin(0.5).setDepth(15);
       o._emo[i].setPosition(ex, ey).setAlpha(cust.delivered[i] ? 0.25 : 1);
       if (cust.delivered[i] && !o._chk[i]) o._chk[i] = scene.add.text(ex + cell*0.22, ey - cell*0.22, '✅',
@@ -204,6 +195,12 @@ const CustomerManager = (() => {
     const c = _customers[id]; if (!c) return false;
     return c.order.some((t, i) => !c.delivered[i] && held.includes(t));
   }
+  function customerAt(x, y) {
+    return getCustomers().find(c => {
+      const o = c.objs; if (!o) return false;
+      return Math.abs(x - o._cx) <= o._hitW / 2 && y >= o._hitTop && y <= o._hitBot;
+    }) || null;
+  }
   function deliverItem(id, dish) {
     const c = _customers[id];
     if (!c || c.served || c.leaving) return { accepted: false };
@@ -217,7 +214,7 @@ const CustomerManager = (() => {
       c.served = true;
       const elapsed = Date.now() - c.spawnedAt;
       speedFactor = Math.max(0, 1 - elapsed / c.patienceMs);
-      const base = c.order.reduce((s, t) => s + (STATIONS[t]?.baseCoins || 5), 0);
+      const base = c.order.reduce((s, t) => s + (DISHES[t]?.coins || 5), 0);
       baseEarned = Math.ceil(base * (CUSTOMER_PAY_MULT[c.type] || 1) * (1 + speedFactor * TIP_SPEED_BONUS));
       window.dispatchEvent(new CustomEvent('dk:custServed', { detail: { id, type: c.type } }));
       if (_scene()) _scene().tweens.add({ targets: c.objs.head, y: '-=8', duration: 130, yoyo: true });
@@ -229,7 +226,7 @@ const CustomerManager = (() => {
 
   window.addEventListener('dk:relayout', _relayout);
 
-  return { startSpawning, stopSpawning, pause, resume, getCustomers, getServePoint, customerNeeds, matchesOrder, deliverItem, resetForNewShift };
+  return { startSpawning, stopSpawning, pause, resume, getCustomers, customerAt, getServePoint, customerNeeds, matchesOrder, deliverItem, resetForNewShift };
 })();
 
 window.CUSTOMER_MGR = CustomerManager;
