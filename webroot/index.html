@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Drift Kitchen</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body { width:100%; height:100%; overflow:hidden; background:#fdf6e3; }
+    #game-mount { position:fixed; inset:0; }
+    #game-mount canvas { width:100% !important; height:100% !important; display:block; }
+    #hud-overlay  { position:fixed; top:0; left:0; right:0; pointer-events:none; z-index:100; }
+    #shop-overlay { position:fixed; inset:0; z-index:200; display:none; overflow-y:auto; }
+  </style>
+</head>
+<body>
+  <div id="game-mount"></div>
+  <div id="hud-overlay"></div>
+  <div id="shop-overlay"></div>
+
+  <script src="phaser.min.js"></script>
+  <script src="rpc.js"></script>
+  <script src="constants.js"></script>
+  <script src="ChefScene.js"></script>
+  <script src="StationManager.js"></script>
+  <script src="CustomerManager.js"></script>
+  <script src="ChefController.js"></script>
+  <script src="KitchenExpander.js"></script>
+  <script src="HUD.js"></script>
+  <script src="ShopScreen.js"></script>
+  <script src="ParticleEffects.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
