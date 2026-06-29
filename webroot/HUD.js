@@ -15,37 +15,54 @@ const HUD = (() => {
     if (!el) return;
     el.innerHTML = `
       <div style="
-        display:flex; align-items:center; gap:8px;
-        padding:5px 12px;
-        background:rgba(26,15,0,0.86);
-        backdrop-filter:blur(3px);
-        border-bottom:2px solid #f97316;
-        font-family:system-ui,sans-serif;
+        display:flex; align-items:center; gap:6px;
+        padding:8px 14px;
+        background:linear-gradient(180deg,rgba(74,55,40,0.97) 0%,rgba(74,55,40,0.92) 100%);
+        border-bottom:3px solid #f97316;
+        font-family:'Segoe UI',system-ui,sans-serif;
         pointer-events:none;
+        box-shadow:0 4px 16px rgba(0,0,0,0.35);
       ">
         <!-- Harbor + craving -->
         <div style="flex:1;min-width:0;overflow:hidden;">
-          <div id="hud-harbor" style="font-size:11px;font-weight:700;color:#38bdf8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-            ⚓ r/Cooking
-          </div>
-          <div id="hud-craving" style="font-size:9px;color:#fbbf24;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;">
-          </div>
+          <div id="hud-harbor" style="
+            font-size:12px;font-weight:800;color:#38bdf8;
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+            text-shadow:0 1px 4px rgba(0,0,0,0.5);
+          ">⚓ r/Cooking</div>
+          <div id="hud-craving" style="
+            font-size:9px;color:#fbbf24;
+            white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+            margin-top:2px;opacity:0.9;
+          "></div>
         </div>
 
-        <!-- Shift timer -->
-        <div style="text-align:center;flex-shrink:0;">
-          <div id="hud-timer" style="font-size:15px;font-weight:900;color:#e6edf3;letter-spacing:1px;">
-            ⏱ 1:00
-          </div>
+        <!-- Shift timer (center) -->
+        <div style="
+          flex-shrink:0;
+          background:rgba(0,0,0,0.3);
+          border:1px solid rgba(255,255,255,0.15);
+          border-radius:20px;
+          padding:4px 14px;
+        ">
+          <div id="hud-timer" style="
+            font-size:16px;font-weight:900;color:#ffffff;
+            letter-spacing:1px;text-shadow:0 1px 6px rgba(0,0,0,0.6);
+          ">⏱ 1:00</div>
         </div>
 
         <!-- Coins pill -->
         <div style="
-          background:rgba(251,191,36,0.14);
-          border:1px solid rgba(251,191,36,0.35);
-          border-radius:20px;padding:3px 10px;flex-shrink:0;
+          flex-shrink:0;
+          background:linear-gradient(135deg,rgba(251,191,36,0.25),rgba(251,191,36,0.12));
+          border:2px solid rgba(251,191,36,0.6);
+          border-radius:22px;
+          padding:4px 14px;
+          box-shadow:0 2px 8px rgba(251,191,36,0.2);
         ">
-          <span style="font-size:14px;font-weight:800;color:#fbbf24;">🪙 <span id="hud-coins">0</span></span>
+          <span style="font-size:15px;font-weight:900;color:#fbbf24;text-shadow:0 1px 4px rgba(0,0,0,0.4);">
+            🪙 <span id="hud-coins">0</span>
+          </span>
         </div>
       </div>
     `;

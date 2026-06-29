@@ -41,66 +41,152 @@ const ShopScreen = (() => {
         font-family:system-ui,sans-serif;
         padding-bottom:40px;
       ">
-        <!-- Header -->
-        <div style="background:#4a3728;padding:18px 16px;text-align:center;border-bottom:3px solid #f97316;position:sticky;top:0;z-index:10;">
-          <div style="font-size:22px;font-weight:900;color:#f97316;">🍳 Shift Complete!</div>
-          <div style="font-size:26px;font-weight:800;color:#fbbf24;margin:5px 0;">🪙 ${_fmt(_shiftEarned)}</div>
-          <div style="font-size:11px;color:#d4b896;">Lifetime total: 🪙 ${_fmt(_total)}</div>
+        <!-- Header with gradient -->
+        <div style="
+          background:linear-gradient(180deg,#5c3a1e 0%,#4a2e16 100%);
+          padding:20px 16px 16px;
+          text-align:center;
+          border-bottom:3px solid #f97316;
+          position:sticky;top:0;z-index:10;
+          box-shadow:0 4px 20px rgba(0,0,0,0.4);
+        ">
+          <div style="font-size:26px;font-weight:900;color:#f97316;text-shadow:0 2px 8px rgba(249,115,22,0.4);">
+            🍳 Shift Complete!
+          </div>
+          <div style="font-size:32px;font-weight:900;color:#fbbf24;margin:8px 0;text-shadow:0 2px 10px rgba(251,191,36,0.4);">
+            🪙 ${_fmt(_shiftEarned)}
+          </div>
+          <div style="font-size:11px;color:#d4b896;opacity:0.8;">
+            Total earned: 🪙 ${_fmt(_total)}
+          </div>
         </div>
 
-        <!-- Available coins -->
-        <div style="text-align:center;padding:10px 16px;font-size:13px;color:#4a3728;font-weight:700;background:#fff8f0;border-bottom:1px solid #d4b896;">
-          Spend now: <span id="shop-avail" style="color:#f97316;font-size:15px;font-weight:800;">🪙 ${_fmt(_coins)}</span>
+        <!-- Available coins bar -->
+        <div style="
+          display:flex;align-items:center;justify-content:center;gap:8px;
+          padding:10px 16px;
+          background:linear-gradient(90deg,#fff8f0,#fdf6e3);
+          border-bottom:2px solid #d4b896;
+          font-family:system-ui,sans-serif;
+        ">
+          <span style="font-size:12px;color:#8b5e3c;font-weight:600;">Available:</span>
+          <span id="shop-avail" style="
+            font-size:17px;font-weight:900;color:#f97316;
+            background:rgba(249,115,22,0.1);border:1px solid rgba(249,115,22,0.3);
+            border-radius:16px;padding:2px 12px;
+          ">🪙 ${_fmt(_coins)}</span>
         </div>
 
         <!-- Station upgrades -->
-        <div style="padding:12px 14px 0;">
-          <div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#8b5e3c;margin-bottom:8px;">STATIONS</div>
-          ${stations.length === 0 ? '<div style="color:#8b5e3c;font-size:12px;">No stations yet</div>' : ''}
+        <div style="padding:14px 14px 0;font-family:system-ui,sans-serif;">
+          <div style="
+            font-size:10px;font-weight:800;letter-spacing:3px;text-transform:uppercase;
+            color:#8b5e3c;margin-bottom:10px;
+            display:flex;align-items:center;gap:8px;
+          ">
+            <div style="flex:1;height:1px;background:#d4b896;"></div>
+            STATIONS
+            <div style="flex:1;height:1px;background:#d4b896;"></div>
+          </div>
+          ${stations.length === 0 ? '<div style="color:#8b5e3c;font-size:12px;text-align:center;padding:8px;">No stations yet</div>' : ''}
           ${stations.map(st => {
             const meta  = STATIONS[st.type];
             const cost  = stMgr.getUpgradeCost(st.id);
             const maxed = st.level >= 4;
             const can   = _coins >= cost && !maxed;
-            const lvlDescs = ['Basic','Faster (−20%)','Auto-cook!','×2 output','Gold (−30%)'];
-            return `<div style="display:flex;align-items:center;gap:10px;background:#fff8f0;border:1px solid #d4b896;border-radius:10px;padding:8px 10px;margin-bottom:7px;">
-              <span style="font-size:22px;flex-shrink:0;">${meta.emoji}</span>
+            const lvlDescs = ['Basic cook','Faster (−20%)','Auto-cooks!','×2 output','Gold ✦ (−30%)'];
+            const nextDesc = maxed ? 'Fully upgraded!' : (lvlDescs[st.level + 1] || 'Upgrade');
+            return `<div style="
+              display:flex;align-items:center;gap:12px;
+              background:linear-gradient(135deg,#fff8f0,#fdf6e3);
+              border:1.5px solid ${can?'rgba(249,115,22,0.4)':'#d4b896'};
+              border-radius:14px;
+              padding:10px 12px;
+              margin-bottom:8px;
+              box-shadow:0 2px 8px rgba(0,0,0,0.06);
+            ">
+              <div style="
+                width:42px;height:42px;
+                background:rgba(249,115,22,0.1);border:1.5px solid rgba(249,115,22,0.2);
+                border-radius:12px;
+                display:flex;align-items:center;justify-content:center;
+                font-size:22px;flex-shrink:0;
+              ">${meta.emoji}</div>
               <div style="flex:1;min-width:0;">
-                <div style="font-size:12px;font-weight:700;color:#1a0f00;">${meta.label}</div>
-                <div style="font-size:9px;color:#8b5e3c;">${lvlDescs[st.level] || 'MAX'}</div>
-                <div style="display:flex;gap:3px;margin-top:4px;">
-                  ${[0,1,2,3,4].map(i=>`<div style="width:10px;height:10px;border-radius:50%;background:${i<=st.level?'#f97316':'#d4b896'};"></div>`).join('')}
+                <div style="font-size:13px;font-weight:800;color:#1a0f00;">${meta.label}</div>
+                <div style="font-size:9px;color:#f97316;font-weight:600;margin-top:1px;">
+                  Next: ${nextDesc}
+                </div>
+                <div style="display:flex;gap:3px;margin-top:5px;">
+                  ${[0,1,2,3,4].map(i=>`<div style="
+                    width:12px;height:12px;border-radius:3px;
+                    background:${i<=st.level?'#f97316':'#d4b896'};
+                    box-shadow:${i<=st.level?'0 1px 4px rgba(249,115,22,0.4)':'none'};
+                  "></div>`).join('')}
                 </div>
               </div>
-              <button onclick="window._shopUpgSt('${st.id}')"
-                style="background:${can?'#f97316':'#d4b896'};color:#fff;border:none;border-radius:8px;padding:7px 11px;font-size:10px;font-weight:700;cursor:${can?'pointer':'not-allowed'};min-width:62px;"
-                ${!can?'disabled':''}>
-                ${maxed ? 'MAX ✓' : '🪙'+_fmt(cost)}
+              <button onclick="window._shopUpgSt('${st.id}')" style="
+                background:${can?'linear-gradient(135deg,#f97316,#e55c00)':'#d4b896'};
+                color:#fff;border:none;border-radius:10px;
+                padding:8px 12px;font-size:11px;font-weight:800;
+                cursor:${can?'pointer':'not-allowed'};min-width:66px;
+                box-shadow:${can?'0 3px 10px rgba(249,115,22,0.4)':'none'};
+              " ${!can?'disabled':''}>
+                ${maxed ? '✓ MAX' : '🪙 '+_fmt(cost)}
               </button>
             </div>`;
           }).join('')}
         </div>
 
         <!-- Chef upgrades -->
-        <div style="padding:8px 14px 0;">
-          <div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#8b5e3c;margin-bottom:8px;">CHEF</div>
+        <div style="padding:8px 14px 0;font-family:system-ui,sans-serif;">
+          <div style="
+            font-size:10px;font-weight:800;letter-spacing:3px;text-transform:uppercase;
+            color:#8b5e3c;margin-bottom:10px;
+            display:flex;align-items:center;gap:8px;
+          ">
+            <div style="flex:1;height:1px;background:#d4b896;"></div>
+            CHEF UPGRADES
+            <div style="flex:1;height:1px;background:#d4b896;"></div>
+          </div>
           ${Object.entries(SHOP_UPGRADES).map(([key, def]) => {
             const lvl  = _ups[key] || 0;
             const cost = Math.floor(def.baseCost * Math.pow(1.8, lvl));
             const maxed= lvl >= def.maxLevel;
             const can  = _coins >= cost && !maxed;
-            return `<div style="display:flex;align-items:center;gap:10px;background:#fff8f0;border:1px solid #d4b896;border-radius:10px;padding:8px 10px;margin-bottom:7px;">
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:12px;font-weight:700;color:#1a0f00;">${def.label}</div>
-                <div style="font-size:9px;color:#8b5e3c;">${def.desc}</div>
-                <div style="display:flex;gap:3px;margin-top:4px;">
-                  ${Array.from({length:def.maxLevel},(_,i)=>`<div style="width:10px;height:10px;border-radius:50%;background:${i<lvl?'#f97316':'#d4b896'};"></div>`).join('')}
+            const icons = { chefSpeed:'⚡', traySize:'🛒' };
+            return `<div style="
+              display:flex;align-items:center;gap:12px;
+              background:linear-gradient(135deg,#f0fff4,#e8f8ef);
+              border:1.5px solid ${can?'rgba(34,197,94,0.4)':'#d4b896'};
+              border-radius:14px;padding:10px 12px;margin-bottom:8px;
+              box-shadow:0 2px 8px rgba(0,0,0,0.06);
+            ">
+              <div style="
+                width:42px;height:42px;
+                background:rgba(34,197,94,0.1);border:1.5px solid rgba(34,197,94,0.2);
+                border-radius:12px;display:flex;align-items:center;justify-content:center;
+                font-size:22px;flex-shrink:0;
+              ">${icons[key]||'⬆'}</div>
+              <div style="flex:1;">
+                <div style="font-size:13px;font-weight:800;color:#1a0f00;">${def.label}</div>
+                <div style="font-size:9px;color:#22c55e;font-weight:600;margin-top:1px;">${def.desc}</div>
+                <div style="display:flex;gap:3px;margin-top:5px;">
+                  ${Array.from({length:def.maxLevel},(_,i)=>`<div style="
+                    width:12px;height:12px;border-radius:3px;
+                    background:${i<lvl?'#22c55e':'#d4b896'};
+                    box-shadow:${i<lvl?'0 1px 4px rgba(34,197,94,0.4)':'none'};
+                  "></div>`).join('')}
                 </div>
               </div>
-              <button onclick="window._shopUpgChef('${key}')"
-                style="background:${can?'#22c55e':'#d4b896'};color:#fff;border:none;border-radius:8px;padding:7px 11px;font-size:10px;font-weight:700;cursor:${can?'pointer':'not-allowed'};min-width:62px;"
-                ${!can?'disabled':''}>
-                ${maxed ? 'MAX ✓' : '🪙'+_fmt(cost)}
+              <button onclick="window._shopUpgChef('${key}')" style="
+                background:${can?'linear-gradient(135deg,#22c55e,#16a34a)':'#d4b896'};
+                color:#fff;border:none;border-radius:10px;
+                padding:8px 12px;font-size:11px;font-weight:800;
+                cursor:${can?'pointer':'not-allowed'};min-width:66px;
+                box-shadow:${can?'0 3px 10px rgba(34,197,94,0.4)':'none'};
+              " ${!can?'disabled':''}>
+                ${maxed ? '✓ MAX' : '🪙 '+_fmt(cost)}
               </button>
             </div>`;
           }).join('')}
@@ -110,9 +196,16 @@ const ShopScreen = (() => {
         ${_renderExpansion()}
 
         <!-- Next shift -->
-        <div style="padding:14px 14px 0;">
-          <button onclick="window._shopNext()"
-            style="width:100%;padding:15px;background:#f97316;color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:800;cursor:pointer;box-shadow:0 3px 10px rgba(249,115,22,0.4);">
+        <div style="padding:14px 14px 24px;font-family:system-ui,sans-serif;">
+          <button onclick="window._shopNext()" style="
+            width:100%;padding:16px;
+            background:linear-gradient(135deg,#f97316,#e55c00);
+            color:#fff;border:none;border-radius:16px;
+            font-size:17px;font-weight:900;cursor:pointer;
+            box-shadow:0 4px 20px rgba(249,115,22,0.5);
+            letter-spacing:0.5px;
+            border-bottom:3px solid rgba(0,0,0,0.2);
+          ">
             ▶ Next Shift
           </button>
         </div>
@@ -125,20 +218,45 @@ const ShopScreen = (() => {
     if (next > 5) return '';
     const td  = KITCHEN_TIERS[next];
     const can = _coins >= td.unlockCost;
+    const pct = Math.min(1, _coins / td.unlockCost);
     return `
-      <div style="padding:8px 14px 0;">
-        <div style="font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#8b5e3c;margin-bottom:8px;">EXPAND KITCHEN</div>
-        <div style="background:#fff8f0;border:2px solid ${can?'#f97316':'#d4b896'};border-radius:10px;padding:10px 12px;display:flex;align-items:center;gap:10px;">
-          <span style="font-size:26px;">🏗</span>
-          <div style="flex:1;">
-            <div style="font-size:13px;font-weight:700;color:#1a0f00;">${td.label}</div>
-            <div style="font-size:9px;color:#8b5e3c;">Bigger kitchen + new stations unlock</div>
+      <div style="padding:8px 14px 0;font-family:system-ui,sans-serif;">
+        <div style="
+          font-size:10px;font-weight:800;letter-spacing:3px;text-transform:uppercase;
+          color:#8b5e3c;margin-bottom:10px;
+          display:flex;align-items:center;gap:8px;
+        ">
+          <div style="flex:1;height:1px;background:#d4b896;"></div>
+          EXPAND KITCHEN
+          <div style="flex:1;height:1px;background:#d4b896;"></div>
+        </div>
+        <div style="
+          background:linear-gradient(135deg,${can?'#fff8e8':'#fff8f0'},${can?'#ffecc8':'#fdf6e3'});
+          border:2px solid ${can?'#f97316':'#d4b896'};
+          border-radius:16px;padding:12px 14px;
+          box-shadow:${can?'0 4px 16px rgba(249,115,22,0.2)':'none'};
+        ">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="font-size:30px;">🏗</div>
+            <div style="flex:1;">
+              <div style="font-size:14px;font-weight:800;color:#1a0f00;">${td.label}</div>
+              <div style="font-size:9px;color:#8b5e3c;margin-top:2px;">More stations • Bigger kitchen • New recipes</div>
+              ${!can ? `<div style="margin-top:6px;background:#e8e0d8;border-radius:4px;height:6px;overflow:hidden;">
+                <div style="height:100%;width:${Math.round(pct*100)}%;background:linear-gradient(90deg,#f97316,#fbbf24);border-radius:4px;"></div>
+              </div>
+              <div style="font-size:8px;color:#8b5e3c;margin-top:3px;">🪙 ${_fmt(_coins)} / ${_fmt(td.unlockCost)}</div>` : ''}
+            </div>
+            <button onclick="window._shopExpand()" style="
+              background:${can?'linear-gradient(135deg,#f97316,#e55c00)':'#d4b896'};
+              color:#fff;border:none;border-radius:12px;
+              padding:10px 14px;font-size:12px;font-weight:800;
+              cursor:${can?'pointer':'not-allowed'};
+              box-shadow:${can?'0 3px 12px rgba(249,115,22,0.4)':'none'};
+              white-space:nowrap;
+            " ${!can?'disabled':''}>
+              ${can ? '🔓 Expand!' : '🪙 '+_fmt(td.unlockCost)}
+            </button>
           </div>
-          <button onclick="window._shopExpand()"
-            style="background:${can?'#f97316':'#d4b896'};color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:700;cursor:${can?'pointer':'not-allowed'};"
-            ${!can?'disabled':''}>
-            🪙${_fmt(td.unlockCost)}
-          </button>
         </div>
       </div>`;
   }
