@@ -198,45 +198,50 @@ const StationManager = (() => {
       else if (inst.contents.length) o.item.setText(inst.contents.map(c => ITEMS[c].emoji).join('')).setVisible(true);
       else o.item.setText('').setVisible(false);
       o.item.setY(inst._cy - inst._h*0.06);
-    } else { // cook / maker — render the batch of slots
+    } else { // cook / maker — render EVERY slot (see all 2/3/4 items, not just ×N)
       const scene = _scene();
+      o.item.setVisible(false);
+      if (o.burn) o.burn.setVisible(false);
+      if (o.count) o.count.setVisible(false);
       if (scene) scene.tweens.killTweensOf(o.item);
-      o.item.setY(inst._cy - inst._h*0.12);
+      if (!o.items) o.items = [];
       const slots = inst.slots || [];
-      const ready = slots.filter(s => s.phase === 'ready');
-      const cooking = slots.filter(s => s.phase === 'cooking');
-      const burnt = slots.filter(s => s.phase === 'burnt');
-      if (ready.length) {
-        o.item.setText(ITEMS[ready[0].output].emoji).setVisible(true);
-        o.hint.setStroke('#16a34a', 3).setText(ready.length > 1 ? 'TAKE ✓ ×' + ready.length : 'TAKE ✓').setVisible(true);
-        if (scene) scene.tweens.add({ targets: o.item, y: inst._cy - inst._h*0.28, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
-      } else if (burnt.length) {
-        o.item.setVisible(false);
-        const cx = inst._cx, cy = inst._cy - inst._h*0.12, r = inst._w*0.17;
-        o.burn.clear();
-        o.burn.fillStyle(0x14110d, 1); o.burn.fillEllipse(cx, cy, r*2.1, r*1.3);
-        o.burn.fillStyle(0x3a2a1a, 1); o.burn.fillEllipse(cx, cy - r*0.12, r*1.5, r*0.9);
-        o.burn.fillStyle(0xff4500, 0.75); o.burn.fillCircle(cx - r*0.5, cy + r*0.1, r*0.2); o.burn.fillCircle(cx + r*0.55, cy, r*0.15);
-        o.burn.setVisible(true);
-        o.hint.setStroke('#b91c1c', 3).setText(burnt.length > 1 ? '🗑 BIN ×' + burnt.length : '🗑 BIN').setVisible(true);
-      } else if (cooking.length) {
-        o.item.setText(inst.kind === 'cook' ? ITEMS[cooking[0].item].emoji : inst.def.emoji).setVisible(true);
-      } else {
-        o.item.setText(inst.kind === 'maker' ? inst.def.emoji : '').setVisible(inst.kind === 'maker');
+      const n = slots.length;
+      const fs = Math.max(9, Math.round(inst._w * (n <= 1 ? 0.42 : n === 2 ? 0.34 : 0.28)));
+      const spacing = n <= 1 ? 0 : Math.min(inst._w * 0.62 / (n - 1), inst._w * 0.33);
+      const baseY = inst._cy - inst._h * 0.12;
+      let readyCount = 0, burntCount = 0;
+      const total = Math.max(n, o.items.length);
+      for (let i = 0; i < total; i++) {
+        if (i < n) {
+          const slot = slots[i];
+          if (!o.items[i] && scene) o.items[i] = scene.add.text(0, 0, '', { fontSize: '10px' }).setOrigin(0.5).setDepth(24);
+          const t = o.items[i]; if (!t) continue;
+          if (scene) scene.tweens.killTweensOf(t);
+          let emoji, tint = null;
+          if (slot.phase === 'ready') { emoji = ITEMS[slot.output].emoji; readyCount++; }
+          else if (slot.phase === 'burnt') { emoji = ITEMS[slot.output].emoji; tint = 0x3a3a3a; burntCount++; }
+          else { emoji = inst.kind === 'cook' ? ITEMS[slot.item].emoji : inst.def.emoji; } // cooking
+          const x = inst._cx + (i - (n - 1) / 2) * spacing;
+          t.setText(emoji).setFontSize(fs).setPosition(x, baseY).setVisible(true);
+          if (tint != null) t.setTint(tint); else t.clearTint();
+          if (slot.phase === 'ready' && scene) scene.tweens.add({ targets: t, y: baseY - inst._h * 0.12, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+        } else if (o.items[i]) {
+          if (scene) scene.tweens.killTweensOf(o.items[i]);
+          o.items[i].setVisible(false);
+        }
       }
-      // batch count badge
-      if (!o.count && scene) o.count = scene.add.text(0, 0, '', { fontSize: Math.max(9, Math.round(inst._w*0.16)) + 'px', fontStyle: 'bold', color: '#ffffff', stroke: '#5c3a1e', strokeThickness: 3 }).setOrigin(0.5).setDepth(26);
-      if (o.count) {
-        if (slots.length > 1) o.count.setText('×' + slots.length).setPosition(inst._cx + inst._w*0.34, inst._cy - inst._h*0.3).setVisible(true);
-        else o.count.setVisible(false);
-      }
+      if (readyCount) o.hint.setStroke('#16a34a', 3).setText(readyCount > 1 ? 'TAKE ✓ ×' + readyCount : 'TAKE ✓').setVisible(true);
+      else if (burntCount) o.hint.setStroke('#b91c1c', 3).setText(burntCount > 1 ? '🗑 BIN ×' + burntCount : '🗑 BIN').setVisible(true);
+      else o.hint.setVisible(false);
     }
   }
 
   function _destroy(inst) {
     if (!inst.objs) return;
     const scene = _scene();
-    Object.values(inst.objs).forEach(o => { try { scene?.tweens?.killTweensOf(o); o?.destroy?.(); } catch (_) {} });
+    if (inst.objs.items) inst.objs.items.forEach(t => { try { scene?.tweens?.killTweensOf(t); t?.destroy?.(); } catch (_) {} });
+    Object.values(inst.objs).forEach(o => { if (Array.isArray(o)) return; try { scene?.tweens?.killTweensOf(o); o?.destroy?.(); } catch (_) {} });
     inst.objs = {};
   }
 
