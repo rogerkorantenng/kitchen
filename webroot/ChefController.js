@@ -4,8 +4,9 @@
 // by both the player and the auto-staff.
 
 const ChefController = (() => {
-  let _tray = [];
-  let _trayMax = CHEF_TRAY_BASE;
+  let _hand = null;        // item id currently held in hand
+  let _dragging = false;
+  let _combo = 0, _lastServe = 0, _goal = 0;
   let _coins = 0, _shiftCoins = 0, _served = 0;
   let _rep = 60, _day = 1, _kitchenTier = 1;
   let _shiftTimer = null, _shiftActive = false, _paused = false;
@@ -13,20 +14,22 @@ const ChefController = (() => {
   let _cravings = [];
   let _staff = [];
 
-  function _cravingMult(type) {
+  const _DISH_CRAVE = { burger: 'grilled', fries: 'street', cola: 'sweet', coffee: 'comfort' };
+  function _cravingMult(dish) {
+    const cat = _DISH_CRAVE[dish]; if (!cat) return 1;
     const m = _cravings.find(c => {
       const cl = (c.category || '').toLowerCase();
-      return cl === type ||
-        (type === 'grill'  && cl === 'grilled') ||
-        (type === 'fryer'  && (cl === 'street' || cl === 'fried')) ||
-        (type === 'wok'    && (cl === 'comfort' || cl === 'noodles')) ||
-        (type === 'bakery' && cl === 'baked') ||
-        (type === 'smoker' && (cl === 'grilled' || cl === 'bbq'));
+      return cl === cat || (cat === 'street' && cl === 'fried') || (cat === 'grilled' && cl === 'bbq');
     });
     return m ? m.multiplier : 1;
   }
 
-  function _refreshTray() { window.CHEF_SCENE?.setHeldItems(_tray.map(t => STATIONS[t]?.emoji || '?')); }
+  function _setHand(item) {
+    _hand = item || null;
+    window.CHEF_SCENE?.setHand(_hand ? ITEMS[_hand].emoji : null);
+    if (_hand) { window.STATION_MGR?.setDropHighlight(_hand); window.CUSTOMER_MGR?.setServeHighlight(_hand); }
+    else { window.STATION_MGR?.clearDropHighlight(); window.CUSTOMER_MGR?.clearServeHighlight(); }
+  }
   function _updateCoins() { window.dispatchEvent(new CustomEvent('dk:coinsChanged', { detail: { coins: _coins, shiftCoins: _shiftCoins } })); }
   function _setRep(v) { _rep = Math.max(0, Math.min(100, v)); window.dispatchEvent(new CustomEvent('dk:repChanged', { detail: { rep: _rep } })); }
 
@@ -42,77 +45,110 @@ const ChefController = (() => {
     // animate the plated dish flying to the customer
     const tray = scene.trayCenter ? scene.trayCenter() : { cx: scene.W/2, cy: scene.H*0.9 };
     const fx = from ? from.x : tray.cx, fy = from ? from.y : tray.cy;
-    scene.flyDish(fx, fy, sp.x, sp.y + 8, STATIONS[dish]?.emoji || '🍽️', () => {
+    scene.flyDish(fx, fy, sp.x, sp.y + 8, dish, () => {
       if (res.complete && window.PARTICLE_FX) window.PARTICLE_FX.serveBurst(sp.x, sp.y);
     });
     if (!res.complete) return res;
+    // combo: consecutive serves within 8s build a multiplier
+    if (Date.now() - _lastServe > 8000) _combo = 0;
+    _combo++; _lastServe = Date.now();
+    const comboMult = Math.min(3, 1 + (_combo - 1) * 0.2);
     const craving = (res.order || []).reduce((m, t) => Math.max(m, _cravingMult(t)), 1);
-    const earned = Math.ceil(res.baseEarned * craving);
+    const perfect = res.speedFactor > 0.7;
+    let earned = Math.ceil(res.baseEarned * craving * comboMult * (perfect ? 1.25 : 1));
     _coins += earned; _shiftCoins += earned; _served++;
     _setRep(_rep + REP_PER_SERVE); _updateCoins();
-    window.STATION_MGR?.updateUpgradeIcons(_coins);
+    window.SFX?.serve(_combo); if (perfect) window.SFX?.perfect();
     const bonus = craving > 1 ? ` ×${craving}🔥` : '';
     scene.showFloatText(sp.x, ly, `+${earned}🪙${bonus}`, '#fbbf24', 17);
+    if (_combo >= 2) scene.showFloatText(sp.x, ly - 22, `COMBO ×${_combo}`, '#f97316', 14);
+    if (perfect) scene.showFloatText(sp.x, ly - 40, '⭐ PERFECT', '#22c55e', 13);
+    window.dispatchEvent(new CustomEvent('dk:comboChanged', { detail: { combo: _combo } }));
     window.dispatchEvent(new CustomEvent('dk:coinEarned', { detail: { amount: earned, x: sp.x, y: ly } }));
     send('DISH_SERVED', { stationId: 'serve', category: (res.order && res.order[0]) || 'grill' });
     return res;
   }
 
-  // ── Tap a station ────────────────────────────────────────────────────────────
-  window.addEventListener('dk:stationTapped', (ev) => {
-    const stMgr = window.STATION_MGR, scene = window.CHEF_SCENE;
-    if (!stMgr || !scene) return;
-    const st = stMgr.getStations().find(s => s.id === ev.detail.id); if (!st) return;
-    if (stMgr.isReady(st.id)) {
-      if (_tray.length < _trayMax) {
-        const dish = stMgr.pickUp(st.id);
-        if (dish) { _tray.push(dish); _refreshTray();
-          scene.showFloatText(st._cx, st._cy - st._h * 0.8, STATIONS[dish]?.emoji || '✓', '#38bdf8', 16); }
-      } else scene.showFloatText(st._cx, st._cy - st._h * 0.8, 'Tray full!', '#ef4444', 12);
-    } else if (!stMgr.isCooking(st.id)) {
-      stMgr.startCooking(st.id);
-    } else {
-      scene.showFloatText(st._cx, st._cy - st._h * 0.6, '⏳', '#94a3b8', 13);
-    }
-  });
+  // ── Interaction: tap-to-pick → tap-target, OR drag-and-drop ──────────────────
+  // Grab on pointer-down (take into hand), place on pointer-up over a target.
+  function _hit(x, y) {
+    const st = window.STATION_MGR?.stationAt(x, y);
+    if (st) return { kind: 'station', inst: st };
+    const c = window.CUSTOMER_MGR?.customerAt(x, y);
+    if (c) return { kind: 'customer', cust: c };
+    return null;
+  }
 
-  // ── Tap a customer → serve matching tray items ───────────────────────────────
-  window.addEventListener('dk:customerTapped', (ev) => {
-    const custMgr = window.CUSTOMER_MGR, scene = window.CHEF_SCENE;
-    if (!custMgr || !scene) return;
-    const id = ev.detail.id;
-    let any = false;
-    for (let i = _tray.length - 1; i >= 0; i--) {
-      if (custMgr.customerNeeds(id, _tray[i]) && deliverDish(id, _tray[i]).accepted) { _tray.splice(i, 1); any = true; }
+  function _onDown(p) {
+    const scene = window.CHEF_SCENE, stMgr = window.STATION_MGR;
+    const t = _hit(p.x, p.y);
+    if (_hand == null && t && t.kind === 'station') {
+      const item = stMgr.takeFrom(t.inst);
+      if (item) { _setHand(item); _dragging = true; scene.showGhost(ITEMS[item].emoji); scene.moveGhost(p.x, p.y); window.SFX?.pickup(); }
+      else if (t.inst.kind === 'maker' && t.inst.state === 'idle') { stMgr.startMake(t.inst); window.SFX?.place(); }
+    } else {
+      _dragging = false;
     }
-    if (any) _refreshTray();
-    else {
-      const sp = custMgr.getServePoint(id);
-      if (sp) {
-        const c = custMgr.getCustomers().find(x => x.id === id);
-        const need = c ? c.order.filter((t, j) => !c.delivered[j]).map(t => STATIONS[t]?.emoji || '?').join('') : '';
-        scene.showFloatText(sp.x, sp.y - 18, need ? 'Wants ' + need : '…', '#8b949e', 12);
+  }
+  function _onMove(p) { if (_dragging && _hand) window.CHEF_SCENE.moveGhost(p.x, p.y); }
+  function _onUp(p) {
+    const scene = window.CHEF_SCENE;
+    scene.hideGhost();
+    if (_hand) {
+      const t = _hit(p.x, p.y);
+      let ok = false, rejected = false;
+      if (t && t.kind === 'station') {
+        ok = window.STATION_MGR.putTo(t.inst, _hand);
+        if (ok) window.SFX?.place(); else rejected = true;
+      } else if (t && t.kind === 'customer') {
+        if (ITEMS[_hand].dish && window.CUSTOMER_MGR.customerNeeds(t.cust.id, _hand)) {
+          deliverDish(t.cust.id, _hand, { x: p.x, y: p.y }); ok = true;
+        } else {
+          rejected = true;
+          const need = t.cust.order.filter((d, j) => !t.cust.delivered[j]).map(d => DISHES[d]?.emoji || '?').join('');
+          const sp = window.CUSTOMER_MGR.getServePoint(t.cust.id);
+          if (sp) scene.showFloatText(sp.x, sp.y - 18, need ? 'Wants ' + need : '…', '#8b949e', 12);
+        }
       }
+      if (ok) _setHand(null);
+      else if (rejected) { window.SFX?.error(); scene.cameras.main.shake(70, 0.0022); scene.showFloatText(p.x, p.y - 14, '✗', '#ef4444', 14); }
     }
+    _dragging = false;
+  }
+
+  window.addEventListener('dk:sceneReady', () => {
+    const scene = window.CHEF_SCENE; if (!scene || scene._dkInputWired) return;
+    scene._dkInputWired = true;
+    scene.input.on('pointerdown', _onDown);
+    scene.input.on('pointermove', _onMove);
+    scene.input.on('pointerup', _onUp);
+    scene.input.on('gameout', () => { scene.hideGhost(); _dragging = false; });
   });
 
   // ── Shift / day ──────────────────────────────────────────────────────────────
+  function _computeGoal() { return Math.round((30 + 22 * _kitchenTier) * (1 + (_day - 1) * 0.3)); }
+  function _goalStars() {
+    const r = _goal > 0 ? _shiftCoins / _goal : 0;
+    return r >= 1 ? 3 : r >= 0.65 ? 2 : r >= 0.35 ? 1 : 0;
+  }
   function _finishShift() {
     _shiftActive = false; _paused = false;
     window.CUSTOMER_MGR?.stopSpawning();
     window.STAFF_MGR?.endShift();
-    window.dispatchEvent(new CustomEvent('dk:shiftEnded', { detail: { coins: _shiftCoins, total: _coins, served: _served, rep: _rep, day: _day } }));
+    window.dispatchEvent(new CustomEvent('dk:shiftEnded', { detail: {
+      coins: _shiftCoins, total: _coins, served: _served, rep: _rep, day: _day,
+      goal: _goal, goalStars: _goalStars() } }));
     _day++;
   }
   function startShift(tier) {
     _kitchenTier = tier || _kitchenTier;
-    _shiftActive = true; _paused = false; _shiftCoins = 0; _served = 0; _tray = []; _refreshTray();
+    _shiftActive = true; _paused = false; _shiftCoins = 0; _served = 0; _combo = 0; _goal = _computeGoal(); _setHand(null);
     window.STATION_MGR?.resetForNewShift();
     window.CUSTOMER_MGR?.startSpawning(_kitchenTier, _day);
     window.STAFF_MGR?.beginShift();
     const durationMs = (SHIFT_DURATIONS[_kitchenTier] || 70) * 1000;
     _endTime = Date.now() + durationMs;
-    window.dispatchEvent(new CustomEvent('dk:shiftStarted', { detail: { durationMs, day: _day, tier: _kitchenTier } }));
+    window.dispatchEvent(new CustomEvent('dk:shiftStarted', { detail: { durationMs, day: _day, tier: _kitchenTier, goal: _goal } }));
     if (_shiftTimer) clearTimeout(_shiftTimer);
     _shiftTimer = window.setTimeout(_finishShift, durationMs);
   }
@@ -135,7 +171,8 @@ const ChefController = (() => {
     window.dispatchEvent(new CustomEvent('dk:shiftResumed', { detail: { remainingMs: _remainingMs } }));
   }
 
-  window.addEventListener('dk:custWalkout', () => _setRep(_rep + REP_PER_WALKOUT));
+  window.addEventListener('dk:custWalkout', () => { _setRep(_rep + REP_PER_WALKOUT); _combo = 0; window.SFX?.fail(); window.dispatchEvent(new CustomEvent('dk:comboChanged', { detail: { combo: 0 } })); });
+  window.addEventListener('dk:burnt', () => { _setRep(_rep - 1); });
 
   // ── Staff ────────────────────────────────────────────────────────────────────
   function _cookIds() { return _staff.filter(s => s.role === 'cook').map(s => s.stationId); }
@@ -147,13 +184,13 @@ const ChefController = (() => {
 
   // ── Accessors ────────────────────────────────────────────────────────────────
   function getCoins() { return _coins; }
-  function setCoins(n) { _coins = Math.max(0, Math.floor(n)); _updateCoins(); window.STATION_MGR?.updateUpgradeIcons(_coins); }
+  function setCoins(n) { _coins = Math.max(0, Math.floor(n)); _updateCoins(); }
   function getTier() { return _kitchenTier; }
   function getRep() { return _rep; }
   function getDay() { return _day; }
   function setKitchenTier(t) { _kitchenTier = t; }
   function upgradeChefSpeed(level) { window._cookSpeedMult = Math.max(0.4, 1 - level * 0.12); } // prep speed
-  function upgradeTraySize(level) { _trayMax = CHEF_TRAY_BASE + level; }
+  function upgradeTraySize() { /* no tray in the assembly model */ }
 
   // ── Server hydrate ───────────────────────────────────────────────────────────
   window.addEventListener('devvit:INIT_RESPONSE', (ev) => {
@@ -163,7 +200,7 @@ const ChefController = (() => {
     _kitchenTier = Math.min(5, (st.unlockedCuisineTiers || 0) + 1);
     upgradeTraySize(st.offlineEffLevel || 0);
     (st.crew || []).forEach(() => _staff.push({ role: 'waiter' }));
-    (st.stations || []).forEach(s => { if (s.hasCook) _staff.push({ role: 'cook', stationId: s.stationType }); });
+    (st.stations || []).forEach(s => { if (s.hasCook) _staff.push({ role: 'cook', stationId: s.id }); });
     _updateCoins(); _setRep(_rep);
     window.setTimeout(() => {
       if (window.CHEF_SCENE && window.STATION_MGR) {

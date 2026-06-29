@@ -5,7 +5,7 @@
 
 const ShopScreen = (() => {
   let _coins = 0, _total = 0, _shiftEarned = 0, _served = 0, _rep = 60, _day = 1;
-  let _tier = 1, _mode = 'end';
+  let _tier = 1, _mode = 'end', _goalStars = 0, _goalAmt = 0;
   let _ups = { chefSpeed: 0, traySize: 0 };
 
   function _fmt(n) { n = Math.floor(n); return n >= 1e3 ? (n/1e3).toFixed(1)+'K' : String(n); }
@@ -19,6 +19,8 @@ const ShopScreen = (() => {
     _served = detail.served || 0;
     _rep = detail.rep != null ? detail.rep : _rep;
     _day = detail.day || _day;
+    _goalStars = detail.goalStars != null ? detail.goalStars : 0;
+    _goalAmt = detail.goal || 0;
     const el = document.getElementById('shop-overlay');
     if (!el) return;
     el.style.display = 'block';
@@ -43,7 +45,7 @@ const ShopScreen = (() => {
 
   function _render(el) {
     const stMgr = window.STATION_MGR;
-    const stations = stMgr?.getStations() || [];
+    const stations = stMgr?.upgradableStations() || [];
     const stars = Math.max(0, Math.min(5, Math.round(_rep / 20)));
 
     el.innerHTML = `
@@ -53,8 +55,11 @@ const ShopScreen = (() => {
           <div class="shop-h-earned">🪙 ${_fmt(_mode === 'shift' ? _coins : _shiftEarned)}</div>
           <div class="shop-h-stats">
             <span>${_mode === 'shift' ? '⏸ Day ' + _day : '🍽 ' + _served + ' served'}</span>
-            <span>${'⭐'.repeat(stars)}${'☆'.repeat(5-stars)}</span>
+            <span>${_mode === 'shift'
+              ? '⭐'.repeat(stars) + '☆'.repeat(5 - stars)
+              : '⭐'.repeat(_goalStars) + '☆'.repeat(3 - _goalStars)}</span>
           </div>
+          ${_mode === 'shift' ? '' : `<div class="shop-h-goal">${_goalStars >= 3 ? 'Goal smashed! 🎉' : _goalStars > 0 ? 'Keep going!' : 'Goal missed'} &nbsp;🪙 ${_fmt(_shiftEarned)} / ${_fmt(_goalAmt)}</div>`}
         </div>
 
         <div class="shop-avail-bar">
@@ -85,18 +90,17 @@ const ShopScreen = (() => {
 
   function _stationCard(st) {
     const stMgr = window.STATION_MGR;
-    const meta = STATIONS[st.type];
-    const cost = stMgr.getUpgradeCost(st.id);
-    const maxed = st.level >= 4;
+    const meta = STATION_DEFS[st.defId];
+    const cost = stMgr.getUpgradeCost(st);
+    const maxed = st.level >= 3;
     const can = _coins >= cost && !maxed;
-    const descs = ['Basic','Faster −20%','Quick cook','×2 value','Gold ✦ −30%'];
-    const next = maxed ? 'Fully upgraded' : (descs[st.level + 1] || 'Upgrade');
+    const next = maxed ? 'Fully upgraded' : 'Faster cooking';
     return `<div class="shop-card ${can?'aff':''}">
       <div class="shop-icon orange">${meta.emoji}</div>
       <div class="shop-info">
         <div class="shop-name">${meta.label}</div>
         <div class="shop-desc orange">Next: ${next}</div>
-        <div class="shop-pips">${[0,1,2,3,4].map(i=>`<i class="${i<=st.level?'on':''}"></i>`).join('')}</div>
+        <div class="shop-pips">${[0,1,2].map(i=>`<i class="${i<st.level?'on':''}"></i>`).join('')}</div>
       </div>
       <button onclick="window._shopUpgSt('${st.id}')" class="shop-buy ${can?'':'off'}" ${can?'':'disabled'}>
         ${maxed ? '✓ MAX' : '🪙 '+_fmt(cost)}</button>
@@ -127,9 +131,9 @@ const ShopScreen = (() => {
     const waiterCount = staff.filter(s => s.role === 'waiter').length;
 
     let html = '';
-    // one cook per station (auto-cook)
+    // one cook per cook/maker station (auto-runs it)
     stations.forEach(st => {
-      const meta = STATIONS[st.type];
+      const meta = STATION_DEFS[st.defId];
       const hired = cookStations.has(st.id);
       const cost = Math.floor(STAFF.cook.baseCost * Math.pow(STAFF.cook.costMult, cookCount));
       const can = !hired && _coins >= cost;
@@ -237,7 +241,7 @@ const ShopScreen = (() => {
     const cookStations = new Set(staff.filter(s => s.role === 'cook').map(s => s.stationId));
     const waiters = staff.filter(s => s.role === 'waiter').length;
     const stations = (window.STATION_MGR?.getStations() || []).map((st, i) => ({
-      id: st.id, x: i, y: 0, stationType: st.type, level: st.level,
+      id: st.id, x: i, y: 0, stationType: st.defId, level: st.level,
       hasCook: cookStations.has(st.id), hasServer: false,
     }));
     const crew = Array.from({ length: waiters }, (_, i) => ({
