@@ -1,572 +1,228 @@
-// webroot/ChefScene.js — Drift Kitchen Active Cooking Game
-// Phaser 3 isometric kitchen. Warm, bright, Cooking Fever style.
+// webroot/ChefScene.js — Drift Kitchen, FRONT-FACING tap-to-cook scene (Cooking-Fever style).
 //
-// DEVVIT IFRAME RULES (Trapline proven):
-//   1. 2-frame defer before Phaser measures container
-//   2. Date.now() / window.setTimeout for timing — Phaser time distorted in iframes
-//   3. Manual cleanup in shutdown()
+// Layout (screen space, no camera tricks):
+//   ┌──────────────────────────────┐
+//   │   DINING  — customers + order │  top ~44%
+//   │   tickets behind the counter  │
+//   ├──────────────────────────────┤  service ledge
+//   │   KITCHEN — tappable cooking  │  bottom ~56%
+//   │   stations + serving tray     │
+//   └──────────────────────────────┘
 //
-// D-PAD: Direct position update every 150ms — NO tweens for d-pad movement.
-//        Tweens are only for tap-to-walk (smooth walk to a destination).
+// No movement / no d-pad: you tap a station to cook, tap ready food to plate it,
+// tap a customer to serve. StationManager / CustomerManager own their own sprites
+// and tap-zones positioned via the slot helpers below.
 
 class ChefScene extends Phaser.Scene {
   constructor() {
     super({ key: 'ChefScene' });
-    this.kitchenTier    = 1;
-    this.chefPos        = { x: 0, y: 0 };
-    this.chefDir        = 'down';
-    this.chefGfx        = null;
-    this.heldText       = null;
-    this._walkTween     = null;   // only for tap-to-walk
-    this.originX        = 0;
-    this.originY        = 0;
-    this.counterScreenY = 0;
-    this.floorMinY      = 0;      // chef can't go above this
-    window.CHEF_SCENE   = this;
+    this.kitchenTier = 1;
+    this._bg = [];
+    this._tray = [];
+    window.CHEF_SCENE = this;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
   create() {
     this.W = this.scale.width;
     this.H = this.scale.height;
+    this.cameras.main.setBackgroundColor('#f4d9b0');
     this._computeLayout();
-    this._buildBackground();
-    this._buildFloor();
-    this._buildWalls();
-    this._buildCounter();
-    this._buildLanterns();
-    this._buildChef();
-    // D-pad is now HTML-based (controls.js) — more reliable in Devvit iframes
-    this.input.on('pointerdown', this._onTap, this);
+    this._drawBackground();
+    this._buildTray();
+    this.scale.on('resize', this._onResize, this);
     window.dispatchEvent(new CustomEvent('dk:sceneReady'));
   }
 
+  _onResize(g) {
+    this.W = g.width; this.H = g.height;
+    this._computeLayout();
+    this._drawBackground();
+    this._layoutTray();
+    window.dispatchEvent(new CustomEvent('dk:relayout'));
+  }
+
+  // ─── Layout metrics ──────────────────────────────────────────────────────────
   _computeLayout() {
-    const tier = KITCHEN_TIERS[this.kitchenTier];
-    // isoToScreen(col, row) = origin + (col-row)*TW/2 x, (col+row)*TH/2 y
-    // The grid spans cols 0..(cols-1), rows 0..(rows-1) plus row -1 for wall
-    // Rightmost x: isoToScreen(cols-1, 0) + TILE_W  = originX + (cols-1)*TW/2 + TW
-    // Leftmost  x: isoToScreen(0, rows-1)            = originX - (rows-1)*TW/2
-    // So total width = originX + (cols-1)*TW/2 + TW - (originX - (rows-1)*TW/2)
-    //                = (cols + rows - 1) * TW/2 + TW  (independent of originX)
-    // To center: set originX so leftmost = (W - gridW)/2
-    //   leftmost = originX - (rows-1)*TW/2
-    //   => originX = (W - gridW)/2 + (rows-1)*TW/2
-    const gridW   = (tier.cols + tier.rows - 1) * (TILE_W / 2) + TILE_W;
-    const leftOff = (tier.rows - 1) * (TILE_W / 2);
-    this.originX  = (this.W - gridW) / 2 + leftOff;
-
-    // Vertical: top of grid (row -1, wall) to bottom of counter
-    // We want the kitchen to occupy the middle 60% of height
-    // Top of wall = originY - TILE_H*2.4 (wall height)
-    // Bottom of counter row 0 = originY + (0+0)*TH/2 + TH + counter depth
-    // Set so the grid occupies the top ~55% leaving room for chef + controls
-    // Push kitchen down so it fills screen center.
-    // Wall top is at originY - TILE_H*2.4, counter bottom at originY + TILE_H*1.85
-    // Chef walks below counter. Total vertical span from wall top to floor = ~H*0.75
-    // Set origin so wall top starts at ~H*0.05 (just under HUD)
-    this.originY  = this.H * 0.32;
-  }
-
-  // ─── Background ────────────────────────────────────────────────────────────
-  _buildBackground() {
-    // Warm kitchen gradient
-    const bg = this.add.graphics().setDepth(-20);
-    bg.fillGradientStyle(0xfff5e6, 0xfff5e6, 0xffe8cc, 0xffe8cc, 1);
-    bg.fillRect(0, 0, this.W, this.H);
-  }
-
-  // ─── Isometric floor ───────────────────────────────────────────────────────
-  _buildFloor() {
-    const tier = KITCHEN_TIERS[this.kitchenTier];
-    const g = this.add.graphics().setDepth(-10);
-
-    for (let row = 0; row < tier.rows; row++) {
-      for (let col = 0; col < tier.cols; col++) {
-        const { x, y } = isoToScreen(col, row, this.originX, this.originY);
-        const fill = (col + row) % 2 === 0 ? 0xfdf6e3 : 0xf0e4cc;
-
-        // Diamond tile
-        g.fillStyle(fill, 1);
-        g.fillPoints([
-          { x: x + TILE_W/2, y },
-          { x: x + TILE_W,   y: y + TILE_H/2 },
-          { x: x + TILE_W/2, y: y + TILE_H },
-          { x,               y: y + TILE_H/2 },
-        ], true);
-
-        // Subtle grout
-        g.lineStyle(1, 0xd4b896, 0.35);
-        g.strokePoints([
-          { x: x + TILE_W/2, y },
-          { x: x + TILE_W,   y: y + TILE_H/2 },
-          { x: x + TILE_W/2, y: y + TILE_H },
-          { x,               y: y + TILE_H/2 },
-        ], true);
-      }
-    }
-
-    // Store where the floor starts (in screen Y) so chef can't walk into wall
-    const { y: floorStartY } = isoToScreen(0, 1, this.originX, this.originY);
-    this.floorMinY = floorStartY + TILE_H * 0.5;
-  }
-
-  // ─── Back wall ─────────────────────────────────────────────────────────────
-  _buildWalls() {
-    const tier  = KITCHEN_TIERS[this.kitchenTier];
-    const g     = this.add.graphics().setDepth(-8);
-    const wallH = TILE_H * 2.4;
-
-    // Back wall blocks (behind row -1)
-    for (let col = 0; col < tier.cols; col++) {
-      const { x, y } = isoToScreen(col, -1, this.originX, this.originY);
-
-      // Wall face (front-facing)
-      g.fillStyle(0x5c3d2e, 1);
-      g.fillPoints([
-        { x,               y: y + TILE_H/2 - wallH },
-        { x: x + TILE_W/2, y: y + TILE_H - wallH   },
-        { x: x + TILE_W/2, y: y + TILE_H },
-        { x,               y: y + TILE_H/2 },
-      ], true);
-
-      g.fillStyle(0x4a3728, 1);
-      g.fillPoints([
-        { x: x + TILE_W/2, y: y + TILE_H - wallH   },
-        { x: x + TILE_W,   y: y + TILE_H/2 - wallH },
-        { x: x + TILE_W,   y: y + TILE_H/2 },
-        { x: x + TILE_W/2, y: y + TILE_H },
-      ], true);
-
-      // Wall top (lit)
-      g.fillStyle(0x7a5040, 1);
-      g.fillPoints([
-        { x: x + TILE_W/2, y: y - wallH },
-        { x: x + TILE_W,   y: y + TILE_H/2 - wallH },
-        { x: x + TILE_W/2, y: y + TILE_H - wallH   },
-        { x,               y: y + TILE_H/2 - wallH },
-      ], true);
-    }
-
-    // Wainscoting / baseboard at wall bottom
-    g.lineStyle(2, 0x8b6040, 0.7);
-    const l = isoToScreen(0,           -1, this.originX, this.originY);
-    const r = isoToScreen(tier.cols,   -1, this.originX, this.originY);
-    g.lineBetween(l.x, l.y + TILE_H/2, r.x, r.y + TILE_H/2);
-  }
-
-  // ─── Service counter ───────────────────────────────────────────────────────
-  _buildCounter() {
-    const tier      = KITCHEN_TIERS[this.kitchenTier];
-    const g         = this.add.graphics().setDepth(-5);
-    const counterH  = TILE_H * 0.85;
-
-    for (let col = 0; col < tier.cols; col++) {
-      const { x, y } = isoToScreen(col, 0, this.originX, this.originY);
-
-      // Counter top face (lighter wood)
-      g.fillStyle(0xb07840, 1);
-      g.fillPoints([
-        { x: x + TILE_W/2, y },
-        { x: x + TILE_W,   y: y + TILE_H/2 },
-        { x: x + TILE_W/2, y: y + TILE_H },
-        { x,               y: y + TILE_H/2 },
-      ], true);
-
-      // Counter front-left
-      g.fillStyle(0x8b5e3c, 1);
-      g.fillPoints([
-        { x,               y: y + TILE_H/2 },
-        { x: x + TILE_W/2, y: y + TILE_H },
-        { x: x + TILE_W/2, y: y + TILE_H + counterH },
-        { x,               y: y + TILE_H/2 + counterH },
-      ], true);
-
-      // Counter front-right (darker)
-      g.fillStyle(0x704a2e, 1);
-      g.fillPoints([
-        { x: x + TILE_W/2, y: y + TILE_H },
-        { x: x + TILE_W,   y: y + TILE_H/2 },
-        { x: x + TILE_W,   y: y + TILE_H/2 + counterH },
-        { x: x + TILE_W/2, y: y + TILE_H + counterH },
-      ], true);
-
-      // Top edge shine
-      g.lineStyle(1.5, 0xd4956a, 0.8);
-      g.strokePoints([
-        { x: x + TILE_W/2, y },
-        { x: x + TILE_W,   y: y + TILE_H/2 },
-        { x: x + TILE_W/2, y: y + TILE_H },
-        { x,               y: y + TILE_H/2 },
-      ], true);
-    }
-
-    // Store counter Y boundary
-    const midCol = Math.floor(tier.cols / 2);
-    const { y } = isoToScreen(midCol, 0, this.originX, this.originY);
-    this.counterScreenY = y + TILE_H + counterH;
-    window.DK_COUNTER_Y = this.counterScreenY;
-  }
-
-  // ─── Decorative lanterns ───────────────────────────────────────────────────
-  _buildLanterns() {
-    const tier = KITCHEN_TIERS[this.kitchenTier];
-    const g    = this.add.graphics().setDepth(-3);
-
-    [0.15, 0.5, 0.85].forEach(pct => {
-      const col = Math.round(pct * (tier.cols - 1));
-      const { x, y } = isoToScreen(col, -1, this.originX, this.originY);
-      const cx = x + TILE_W / 2;
-      const cy = y - TILE_H * 0.6;
-
-      // Warm glow
-      g.fillStyle(0xfbbf24, 0.1); g.fillCircle(cx, cy + TILE_H * 0.5, TILE_W * 0.8);
-      // Cord
-      g.lineStyle(2, 0x8b5e3c, 0.9); g.lineBetween(cx, cy - TILE_H * 0.5, cx, cy - TILE_H * 0.1);
-      // Lantern cap
-      g.fillStyle(0xd4622a, 1);
-      g.fillRect(cx - TILE_W * 0.14, cy - TILE_H * 0.1, TILE_W * 0.28, TILE_H * 0.1);
-      // Lantern body
-      g.fillStyle(0xf97316, 1);
-      g.fillRoundedRect(cx - TILE_W * 0.12, cy, TILE_W * 0.24, TILE_H * 0.52, 4);
-      // Inner glow
-      g.fillStyle(0xfbbf24, 0.85);
-      g.fillCircle(cx, cy + TILE_H * 0.26, TILE_W * 0.07);
-      // Border
-      g.lineStyle(1.5, 0xb34a10, 0.8);
-      g.strokeRoundedRect(cx - TILE_W * 0.12, cy, TILE_W * 0.24, TILE_H * 0.52, 4);
-    });
-  }
-
-  // ─── Chef sprite ───────────────────────────────────────────────────────────
-  _buildChef() {
-    const tier = KITCHEN_TIERS[this.kitchenTier];
-    const startCol = Math.floor(tier.cols / 2);
-    const startRow = Math.floor(tier.rows * 0.6);
-    const { x, y } = isoToScreen(startCol, startRow, this.originX, this.originY);
-    this.chefPos = { x: x + TILE_W / 2, y: y + TILE_H / 2 };
-
-    this.chefGfx = this.add.graphics().setDepth(20);
-    this.heldText = this.add.text(this.chefPos.x, this.chefPos.y - TILE_H, '', {
-      fontSize: Math.round(TILE_W * 0.42) + 'px',
-    }).setOrigin(0.5).setDepth(21).setVisible(false);
-
-    this._drawChef(this.chefPos.x, this.chefPos.y, 'down');
-    window.DK_CHEF_POS = { ...this.chefPos };
-  }
-
-  _drawChef(x, y, dir) {
-    const g = this.chefGfx;
-    g.clear();
-
-    // Ground shadow
-    g.fillStyle(0x000000, 0.12);
-    g.fillEllipse(x + 3, y + TILE_H * 0.44, TILE_W * 0.5, TILE_H * 0.14);
-
-    // === LEGS ===
-    g.fillStyle(0x1e3a5f, 1);
-    if (dir === 'left' || dir === 'right') {
-      g.fillRoundedRect(x - TILE_W*0.12, y + TILE_H*0.2, TILE_W*0.24, TILE_H*0.28, 4);
-    } else {
-      g.fillRoundedRect(x - TILE_W*0.18, y + TILE_H*0.2, TILE_W*0.14, TILE_H*0.28, 4);
-      g.fillRoundedRect(x + TILE_W*0.04, y + TILE_H*0.2, TILE_W*0.14, TILE_H*0.28, 4);
-    }
-    // Shoes
-    g.fillStyle(0x0f1f38, 1);
-    if (dir === 'left' || dir === 'right') {
-      g.fillRoundedRect(x - TILE_W*0.15, y + TILE_H*0.44, TILE_W*0.3, TILE_H*0.1, 3);
-    } else {
-      g.fillRoundedRect(x - TILE_W*0.2, y + TILE_H*0.44, TILE_W*0.16, TILE_H*0.1, 3);
-      g.fillRoundedRect(x + TILE_W*0.04, y + TILE_H*0.44, TILE_W*0.16, TILE_H*0.1, 3);
-    }
-
-    // === BODY — white chef coat ===
-    g.fillStyle(0xfafafa, 1);
-    g.fillRoundedRect(x - TILE_W*0.23, y - TILE_H*0.08, TILE_W*0.46, TILE_H*0.32, 6);
-    // Coat collar / lapels
-    g.fillStyle(0xf0f0f0, 1);
-    g.fillTriangle(x - TILE_W*0.08, y - TILE_H*0.08, x, y + TILE_H*0.04, x - TILE_W*0.22, y - TILE_H*0.08);
-    g.fillTriangle(x + TILE_W*0.08, y - TILE_H*0.08, x, y + TILE_H*0.04, x + TILE_W*0.22, y - TILE_H*0.08);
-    // Buttons
-    g.fillStyle(0xf97316, 1);
-    g.fillCircle(x - TILE_W*0.07, y + TILE_H*0.04, TILE_W*0.034);
-    g.fillCircle(x + TILE_W*0.07, y + TILE_H*0.04, TILE_W*0.034);
-    g.fillCircle(x - TILE_W*0.07, y + TILE_H*0.14, TILE_W*0.028);
-    g.fillCircle(x + TILE_W*0.07, y + TILE_H*0.14, TILE_W*0.028);
-
-    // === ARMS ===
-    g.fillStyle(0xfafafa, 1);
-    if (dir === 'left') {
-      g.fillRoundedRect(x - TILE_W*0.4, y - TILE_H*0.02, TILE_W*0.2, TILE_H*0.12, 4);
-      g.fillRoundedRect(x + TILE_W*0.22, y + TILE_H*0.04, TILE_W*0.14, TILE_H*0.1, 4);
-    } else if (dir === 'right') {
-      g.fillRoundedRect(x - TILE_W*0.36, y + TILE_H*0.04, TILE_W*0.14, TILE_H*0.1, 4);
-      g.fillRoundedRect(x + TILE_W*0.2, y - TILE_H*0.02, TILE_W*0.2, TILE_H*0.12, 4);
-    } else {
-      g.fillRoundedRect(x - TILE_W*0.4, y + TILE_H*0.04, TILE_W*0.17, TILE_H*0.1, 4);
-      g.fillRoundedRect(x + TILE_W*0.23, y + TILE_H*0.04, TILE_W*0.17, TILE_H*0.1, 4);
-    }
-    // Hands
-    g.fillStyle(0xfde8c8, 1);
-    if (dir === 'left') {
-      g.fillCircle(x - TILE_W*0.4, y + TILE_H*0.04, TILE_W*0.07);
-    } else if (dir === 'right') {
-      g.fillCircle(x + TILE_W*0.4, y + TILE_H*0.04, TILE_W*0.07);
-    } else {
-      g.fillCircle(x - TILE_W*0.4, y + TILE_H*0.1, TILE_W*0.07);
-      g.fillCircle(x + TILE_W*0.4, y + TILE_H*0.1, TILE_W*0.07);
-    }
-
-    // === NECK ===
-    g.fillStyle(0xfde8c8, 1);
-    g.fillRect(x - TILE_W*0.07, y - TILE_H*0.2, TILE_W*0.14, TILE_H*0.14);
-
-    // === HEAD ===
-    g.fillStyle(0xfde8c8, 1);
-    g.fillRoundedRect(x - TILE_W*0.22, y - TILE_H*0.48, TILE_W*0.44, TILE_H*0.32, 8);
-    // Ear
-    if (dir === 'left') {
-      g.fillCircle(x - TILE_W*0.22, y - TILE_H*0.34, TILE_W*0.07);
-    } else if (dir === 'right') {
-      g.fillCircle(x + TILE_W*0.22, y - TILE_H*0.34, TILE_W*0.07);
-    }
-
-    // === CHEF HAT ===
-    // Brim
-    g.fillStyle(0xfafafa, 1);
-    g.fillRoundedRect(x - TILE_W*0.27, y - TILE_H*0.52, TILE_W*0.54, TILE_H*0.1, 3);
-    // Tall part
-    g.fillRoundedRect(x - TILE_W*0.19, y - TILE_H*0.82, TILE_W*0.38, TILE_H*0.34, 5);
-    // Orange band
-    g.fillStyle(0xf97316, 1);
-    g.fillRect(x - TILE_W*0.19, y - TILE_H*0.54, TILE_W*0.38, TILE_H*0.07);
-    // Hat shadow on brim
-    g.fillStyle(0xe8e8e8, 1);
-    g.fillRoundedRect(x - TILE_W*0.19, y - TILE_H*0.52, TILE_W*0.38, TILE_H*0.04, 2);
-
-    // === FACE ===
-    g.fillStyle(0x2d1a00, 1);
-    if (dir === 'up') {
-      // back of head — no face
-    } else if (dir === 'left') {
-      g.fillCircle(x - TILE_W*0.1, y - TILE_H*0.33, TILE_W*0.044);
-      g.fillRoundedRect(x - TILE_W*0.16, y - TILE_H*0.22, TILE_W*0.14, TILE_H*0.045, 2);
-    } else if (dir === 'right') {
-      g.fillCircle(x + TILE_W*0.1, y - TILE_H*0.33, TILE_W*0.044);
-      g.fillRoundedRect(x + TILE_W*0.02, y - TILE_H*0.22, TILE_W*0.14, TILE_H*0.045, 2);
-    } else {
-      // Eyes
-      g.fillCircle(x - TILE_W*0.09, y - TILE_H*0.33, TILE_W*0.046);
-      g.fillCircle(x + TILE_W*0.09, y - TILE_H*0.33, TILE_W*0.046);
-      // Eye shine
-      g.fillStyle(0xffffff, 0.8);
-      g.fillCircle(x - TILE_W*0.08, y - TILE_H*0.35, TILE_W*0.016);
-      g.fillCircle(x + TILE_W*0.1,  y - TILE_H*0.35, TILE_W*0.016);
-      // Smile
-      g.fillStyle(0x2d1a00, 1);
-      g.lineStyle(TILE_W*0.026, 0x2d1a00, 1);
-      g.beginPath(); g.arc(x, y - TILE_H*0.22, TILE_W*0.1, 0.25, Math.PI - 0.25, false); g.strokePath();
-      // Rosy cheeks
-      g.fillStyle(0xff9999, 0.35);
-      g.fillCircle(x - TILE_W*0.16, y - TILE_H*0.27, TILE_W*0.05);
-      g.fillCircle(x + TILE_W*0.16, y - TILE_H*0.27, TILE_W*0.05);
-    }
-
-    // Update held bubble position
-    if (this.heldText?.visible) {
-      this.heldText.setPosition(x, y - TILE_H * 0.95);
-    }
-    window.DK_CHEF_POS = { x, y };
-  }
-
-  // ─── D-pad (FIXED: direct position update, no tweens) ──────────────────────
-  _buildDpad() {
     const W = this.W, H = this.H;
-    // Position d-pad in bottom-right, big enough to tap easily
-    const padCX = W - 85;
-    const padCY = H - 110;
-    const R     = 32;   // button radius in pixels
-
-    const dirs = [
-      { label:'▲', dx: 0, dy:-1, bx: padCX,      by: padCY - 70  },
-      { label:'▼', dx: 0, dy: 1, bx: padCX,      by: padCY + 70  },
-      { label:'◀', dx:-1, dy: 0, bx: padCX - 70, by: padCY       },
-      { label:'▶', dx: 1, dy: 0, bx: padCX + 70, by: padCY       },
-    ];
-
-    // Background disc
-    const bgDisc = this.add.graphics().setDepth(40);
-    bgDisc.fillStyle(0x000000, 0.28); bgDisc.fillCircle(padCX, padCY, 95);
-    bgDisc.fillStyle(0x000000, 0.15); bgDisc.fillCircle(padCX, padCY, 60);
-
-    dirs.forEach(d => {
-      // Button background — use zone for reliable hit detection in Devvit iframes
-      const btnGfx = this.add.graphics().setDepth(41);
-      const drawBtn = (active) => {
-        btnGfx.clear();
-        btnGfx.fillStyle(active ? 0xf97316 : 0xffffff, active ? 0.9 : 0.25);
-        btnGfx.fillCircle(d.bx, d.by, R);
-        btnGfx.lineStyle(1.5, 0xffffff, active ? 0.9 : 0.4);
-        btnGfx.strokeCircle(d.bx, d.by, R);
-      };
-      drawBtn(false);
-
-      // Arrow label
-      const lbl = this.add.text(d.bx, d.by, d.label, {
-        fontSize: '18px', fontStyle: 'bold', color: '#ffffff',
-        stroke: '#00000066', strokeThickness: 2,
-      }).setOrigin(0.5).setDepth(42);
-
-      // IMPORTANT: Use a Zone for reliable hit detection in Devvit iframes
-      // Phaser Graphics.setInteractive() can fail silently in sandboxed iframes
-      const zone = this.add.zone(d.bx, d.by, R * 2.2, R * 2.2).setInteractive().setDepth(43);
-
-      let held = false, iv = null;
-
-      const doMove = () => {
-        const dir = d.dx < 0 ? 'left' : d.dx > 0 ? 'right' : d.dy < 0 ? 'up' : 'down';
-        this.chefDir = dir;
-        // DIRECT position update — no tween
-        const stepX = d.dx * 18;  // pixels per step
-        const stepY = d.dy * 10;  // smaller Y step due to isometric compression
-        const minY  = this.floorMinY;
-        const newX  = Math.max(30, Math.min(this.W - 30, this.chefPos.x + stepX));
-        const newY  = Math.max(minY, Math.min(this.H - 30, this.chefPos.y + stepY));
-        this.chefPos.x = newX;
-        this.chefPos.y = newY;
-        this._drawChef(newX, newY, dir);
-        window.DK_CHEF_POS = { x: newX, y: newY };
-      };
-
-      zone.on('pointerdown', () => {
-        drawBtn(true);
-        held = true;
-        doMove();
-        iv = setInterval(() => { if (held) doMove(); }, 80); // fast repeat
-      });
-
-      const release = () => {
-        drawBtn(false);
-        held = false;
-        clearInterval(iv);
-      };
-      zone.on('pointerup',   release);
-      zone.on('pointerout',  release);
-    });
-
-    // ── Interact button (bottom-left) ─────────────────────────────────────────
-    const actX = 75, actY = H - 95;
-    const actR = 38;
-
-    const actGfx = this.add.graphics().setDepth(41);
-    const drawAct = (active) => {
-      actGfx.clear();
-      // Outer glow ring
-      actGfx.fillStyle(0xf97316, active ? 0.3 : 0.12);
-      actGfx.fillCircle(actX, actY, actR + 8);
-      // Button body
-      actGfx.fillStyle(active ? 0xff8c00 : 0xf97316, 1);
-      actGfx.fillCircle(actX, actY, actR);
-      // Inner shine
-      actGfx.fillStyle(0xffffff, 0.2);
-      actGfx.fillEllipse(actX - 8, actY - 12, actR * 0.9, actR * 0.5);
-      // Border
-      actGfx.lineStyle(2, 0xffffff, 0.5);
-      actGfx.strokeCircle(actX, actY, actR);
-    };
-    drawAct(false);
-
-    this.add.text(actX, actY - 4, '✋', {
-      fontSize: '22px',
-    }).setOrigin(0.5).setDepth(42);
-
-    this.add.text(actX, actY + actR + 8, 'ACTION', {
-      fontSize: '8px', fontStyle: 'bold', color: 'rgba(255,255,255,0.7)',
-      stroke: '#00000055', strokeThickness: 2,
-    }).setOrigin(0.5).setDepth(42);
-
-    const actZone = this.add.zone(actX, actY, actR * 2.4, actR * 2.4).setInteractive().setDepth(43);
-    actZone.on('pointerdown', () => {
-      drawAct(true);
-      window.dispatchEvent(new CustomEvent('dk:interact'));
-    });
-    actZone.on('pointerup',  () => drawAct(false));
-    actZone.on('pointerout', () => drawAct(false));
+    this.diningH   = Math.round(H * 0.44);   // bottom of dining zone (the service ledge)
+    this.ledgeH    = Math.round(H * 0.05);
+    this.kitchenTop= this.diningH + this.ledgeH;
+    this.trayCY    = H - Math.round(H * 0.07);
+    // station band sits between the kitchen counter top and the tray
+    this.stationBand = (this.trayCY - this.kitchenTop);
+    this.stationCY = this.kitchenTop + this.stationBand * 0.40;
   }
 
-  // ─── Tap on floor = walk there ─────────────────────────────────────────────
-  _onTap(ptr) {
-    // Only walk if tap is below the counter (on the floor area)
-    // and not on a button zone
-    if (ptr.y > this.counterScreenY + TILE_H * 0.3 &&
-        ptr.y < this.H - 160) {  // avoid tap on d-pad/interact area
-      this._walkTo(ptr.x, ptr.y);
+  // Station slot rect: i of n across the kitchen counter.
+  stationSlot(i, n) {
+    const margin = this.W * 0.04;
+    const usable = this.W - margin * 2;
+    const cell = usable / n;
+    const w = Math.min(cell * 0.88, this.W * 0.42, this.stationBand * 0.62);
+    const h = w * 0.9;
+    return { cx: margin + cell * (i + 0.5), cy: this.stationCY, w, h };
+  }
+
+  // Customer slot center (head) + ticket anchor.
+  customerSlot(i, n) {
+    const margin = this.W * 0.05;
+    const usable = this.W - margin * 2;
+    const cell = usable / n;
+    const cx = margin + cell * (i + 0.5);
+    const headCY = this.diningH - Math.round(this.H * 0.055);
+    const w = Math.min(cell * 0.82, this.W * 0.2);
+    return { cx, headCY, ticketCY: this.diningH - this.H * 0.205, w };
+  }
+
+  trayCenter() { return { cx: this.W / 2, cy: this.trayCY, w: this.W * 0.62 }; }
+  coinScreenPos() { return { x: this.W - this.W * 0.12, y: this.H * 0.045 }; }
+
+  // ─── Background ──────────────────────────────────────────────────────────────
+  _drawBackground() {
+    this._bg.forEach(o => { try { o.destroy(); } catch (_) {} });
+    this._bg = [];
+    const W = this.W, H = this.H, add = (o) => { this._bg.push(o); return o; };
+    const g = add(this.add.graphics().setDepth(-100));
+
+    // Dining wall — warm gradient
+    g.fillGradientStyle(0xf6e2c0, 0xf6e2c0, 0xe9c79a, 0xe9c79a, 1);
+    g.fillRect(0, 0, W, this.diningH);
+
+    // soft window panels in the back
+    const winY = this.diningH * 0.22, winH = this.diningH * 0.42;
+    for (let i = 0; i < 4; i++) {
+      const x = W * (0.06 + i * 0.24), w = W * 0.18;
+      g.fillStyle(0xbfe0e8, 0.45); g.fillRoundedRect(x, winY, w, winH, 8);
+      g.fillStyle(0xffffff, 0.12); g.fillRoundedRect(x, winY, w, winH * 0.4, 8);
+      g.lineStyle(3, 0x8a6a45, 0.5); g.strokeRoundedRect(x, winY, w, winH, 8);
+      g.lineBetween(x + w/2, winY, x + w/2, winY + winH);
     }
-  }
-
-  // Tween-based smooth walk (tap-to-move only, NOT used for d-pad)
-  _walkTo(tx, ty, onArrive) {
-    const dx = tx - this.chefPos.x, dy = ty - this.chefPos.y;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    if (dist < 8) { if (onArrive) onArrive(); return; }
-
-    if (Math.abs(dx) > Math.abs(dy)) this.chefDir = dx > 0 ? 'right' : 'left';
-    else this.chefDir = dy > 0 ? 'down' : 'up';
-
-    if (this._walkTween) this._walkTween.stop();
-    const proxy = { x: this.chefPos.x, y: this.chefPos.y };
-    this._walkTween = this.tweens.add({
-      targets: proxy, x: tx, y: ty,
-      duration: (dist / CHEF_SPEED_PX_S) * 1000, ease: 'Linear',
-      onUpdate: () => {
-        this.chefPos.x = proxy.x; this.chefPos.y = proxy.y;
-        this._drawChef(proxy.x, proxy.y, this.chefDir);
-      },
-      onComplete: () => {
-        this.chefPos = { x: tx, y: ty };
-        window.DK_CHEF_POS = { ...this.chefPos };
-        if (onArrive) onArrive();
-      },
+    // bokeh warmth
+    [[0.2,0.12],[0.55,0.2],[0.8,0.1],[0.4,0.3]].forEach(([px,py]) => {
+      g.fillStyle(0xfff0c8, 0.16); g.fillCircle(W*px, this.diningH*py, W*0.05);
     });
+
+    // hanging lamps over the counter
+    const lampN = Math.max(3, Math.round(W / 160));
+    for (let i = 0; i < lampN; i++) {
+      const lx = W * (i + 0.5) / lampN, ly = this.diningH * 0.12;
+      g.lineStyle(2, 0x5c3a1e, 0.8); g.lineBetween(lx, 0, lx, ly);
+      g.fillStyle(0xffce6b, 0.2); g.fillCircle(lx, ly + 14, 34);
+      g.fillStyle(0x1f2937, 1); g.fillEllipse(lx, ly, 30, 14);
+      g.fillStyle(0xffd98a, 1); g.fillEllipse(lx, ly + 6, 22, 10);
+    }
+
+    // ── Service ledge (counter customers stand behind) ──
+    const ly0 = this.diningH;
+    g.fillStyle(0x7a4a28, 1); g.fillRect(0, ly0, W, this.ledgeH);
+    g.fillStyle(0xb07a45, 1); g.fillRect(0, ly0, W, this.ledgeH * 0.45);
+    g.fillStyle(0xe8c389, 1); g.fillRect(0, ly0, W, this.ledgeH * 0.14);
+    g.fillStyle(0x000000, 0.18); g.fillRect(0, ly0 + this.ledgeH - 3, W, 3);
+
+    // ── Kitchen ──
+    const ky = this.kitchenTop;
+    g.fillGradientStyle(0xf3e7d4, 0xf3e7d4, 0xe7d3b4, 0xe7d3b4, 1);
+    g.fillRect(0, ky, W, H - ky);
+    // tiled backsplash strip
+    const tileY = ky + (H - ky) * 0.04, th = (H - ky) * 0.1, tw = W * 0.07;
+    for (let x = 0; x < W; x += tw) {
+      g.fillStyle(0xfff7ea, 0.5); g.fillRoundedRect(x + 2, tileY, tw - 4, th, 4);
+    }
+    // stainless counter surface the stations sit on
+    const cy0 = this.stationCY + this.stationBand * 0.18;
+    g.fillStyle(0xcfd6dd, 1); g.fillRect(0, cy0, W, H - cy0);
+    g.fillStyle(0xe6ebf0, 1); g.fillRect(0, cy0, W, 6);
+    g.fillStyle(0xb9c2cc, 1); g.fillRect(0, cy0 + 6, W, (H - cy0) * 0.12);
+    g.fillStyle(0x000000, 0.05);
+    for (let x = 0; x < W; x += W * 0.16) g.fillRect(x, cy0 + 10, 1, H - cy0);
+
+    // front counter lip below the tray (wood)
+    const lipY = H - this.H * 0.03;
+    g.fillStyle(0x8a5a30, 1); g.fillRect(0, lipY, W, H - lipY);
+    g.fillStyle(0xc89456, 1); g.fillRect(0, lipY, W, 4);
   }
 
-  // ─── Public API ────────────────────────────────────────────────────────────
-  walkPlayerTo(tx, ty, onArrive) { this._walkTo(tx, ty, onArrive); }
-  getPlayerPos()                 { return { ...this.chefPos }; }
-
-  showFloatText(x, y, text, color = '#ffffff', size = 13) {
-    const t = this.add.text(x, y, text, {
-      fontSize: size + 'px', fontStyle: 'bold', color,
-      stroke: '#000000', strokeThickness: 3,
-    }).setOrigin(0.5).setDepth(30);
-    this.tweens.add({ targets: t, y: y - 50, alpha: 0, duration: 900, ease: 'Power2', onComplete: () => t.destroy() });
+  // ─── Serving tray (the plate in your hands) ──────────────────────────────────
+  _buildTray() {
+    this.trayGfx = this.add.graphics().setDepth(60);
+    this.trayText = this.add.text(0, 0, '', { fontSize: Math.round(this.W * 0.05) + 'px' })
+      .setOrigin(0.5).setDepth(61);
+    this.trayHint = this.add.text(0, 0, '', {
+      fontSize: '11px', fontStyle: 'bold', color: '#8b5e3c',
+    }).setOrigin(0.5).setDepth(61);
+    this._layoutTray();
+    this.setHeldItems(this._tray);
+  }
+  _layoutTray() {
+    const t = this.trayCenter();
+    this._trayBox = t;
+    this.setHeldItems(this._tray);
   }
 
   setHeldItems(emojis) {
-    if (!this.heldText) return;
-    if (!emojis || emojis.length === 0) {
-      this.heldText.setVisible(false);
+    this._tray = emojis || [];
+    const t = this._trayBox || this.trayCenter();
+    const g = this.trayGfx; if (!g) return;
+    g.clear();
+    const w = t.w, h = this.H * 0.075, x = t.cx - w/2, y = t.cy - h/2;
+    // plate / tray
+    g.fillStyle(0x000000, 0.12); g.fillRoundedRect(x + 3, y + 4, w, h, 16);
+    g.fillStyle(0xe9eef3, 1); g.fillRoundedRect(x, y, w, h, 16);
+    g.fillStyle(0xffffff, 0.7); g.fillRoundedRect(x + 6, y + 4, w - 12, h * 0.36, 12);
+    g.lineStyle(2, 0xc6cdd4, 1); g.strokeRoundedRect(x, y, w, h, 16);
+    if (!this._tray.length) {
+      this.trayText.setVisible(false);
+      this.trayHint.setText('Tap a station to cook 🍳').setPosition(t.cx, t.cy).setVisible(true);
     } else {
-      this.heldText.setText(emojis.join(' ')).setVisible(true);
-      this.heldText.setPosition(this.chefPos.x, this.chefPos.y - TILE_H * 0.95);
+      this.trayHint.setVisible(false);
+      this.trayText.setText(this._tray.join('  ')).setPosition(t.cx, t.cy).setVisible(true);
     }
+  }
+
+  // ─── Flying plated dish (the "serve" animation) ──────────────────────────────
+  flyDish(fromX, fromY, toX, toY, emoji, cb) {
+    const plate = this.add.graphics().setDepth(3500).setPosition(fromX, fromY);
+    plate.fillStyle(0x000000, 0.15); plate.fillEllipse(0, 4, 34, 12);
+    plate.fillStyle(0xffffff, 1); plate.fillEllipse(0, 0, 32, 12);
+    plate.fillStyle(0xe6ebf0, 1); plate.fillEllipse(0, -1, 22, 8);
+    const food = this.add.text(fromX, fromY - 7, emoji, { fontSize: '22px' }).setOrigin(0.5).setDepth(3501);
+    const midX = (fromX + toX) / 2, midY = Math.min(fromY, toY) - 80;
+    const ctrl = { t: 0 };
+    this.tweens.add({
+      targets: ctrl, t: 1, duration: 440, ease: 'Sine.InOut',
+      onUpdate: () => {
+        const t = ctrl.t, it = 1 - t;
+        const x = it*it*fromX + 2*it*t*midX + t*t*toX;
+        const y = it*it*fromY + 2*it*t*midY + t*t*toY;
+        plate.setPosition(x, y); food.setPosition(x, y - 7).setRotation(Math.sin(t * Math.PI) * 0.3);
+      },
+      onComplete: () => {
+        this.tweens.add({ targets: [plate, food], scaleX: 1.3, scaleY: 1.3, alpha: 0, duration: 220,
+          onComplete: () => { plate.destroy(); food.destroy(); if (cb) cb(); } });
+      },
+    });
+  }
+
+  // ─── Float text ──────────────────────────────────────────────────────────────
+  showFloatText(x, y, text, color = '#ffffff', size = 14) {
+    const t = this.add.text(x, y, text, {
+      fontSize: size + 'px', fontStyle: 'bold', color,
+      stroke: '#3a230f', strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(4000);
+    this.tweens.add({ targets: t, y: y - 46, alpha: 0, duration: 950, ease: 'Power2',
+      onComplete: () => t.destroy() });
   }
 
   rebuildKitchen(tier) {
     this.kitchenTier = tier;
-    this.children.list.filter(o => o.depth < 5).forEach(o => o.destroy());
     this._computeLayout();
-    this._buildBackground();
-    this._buildFloor();
-    this._buildWalls();
-    this._buildCounter();
-    this._buildLanterns();
+    this._drawBackground();
     window.dispatchEvent(new CustomEvent('dk:kitchenRebuilt', { detail: { tier } }));
   }
 
-  update() { /* event-driven */ }
+  update() { /* tap-driven; no per-frame movement */ }
 
-  shutdown() {
-    this.input.off('pointerdown', this._onTap, this);
-  }
+  shutdown() { this.scale.off('resize', this._onResize, this); }
 }
+
+window.ChefScene = ChefScene;
