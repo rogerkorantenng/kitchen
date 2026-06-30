@@ -12,6 +12,13 @@ const MenuScreen = (() => {
   let _myServes = 0;             // orders this player has completed this run
   let _shown = false;            // has the player left the menu yet this session?
   let _inGame = false;           // opened as a pause menu mid-shift? (Play → Resume)
+  let _book = null;              // cached community cookbook dishes (null = loading)
+  let _draft = { name: '', emoji: '', category: '' }; // dish being created
+  let _submitMsg = '';           // feedback under the Create form
+
+  // Picker options — emojis MUST be in the server's allow-list or the submit is rejected.
+  const DISH_CATS = ['grilled', 'spicy', 'fresh', 'comfort', 'street', 'baked', 'batch', 'artisan'];
+  const DISH_EMOJIS = ['🍟','🥩','🍖','🍜','🌮','🍕','🍣','🥘','🍲','🥟','🧆','🥓','🍱','🧋','🍵','🥤','☕','🍰','🎂','🍮','🍩','🧁','🌽','🍓'];
 
   function _el() { return document.getElementById('menu-overlay'); }
   function _fmt(n) { n = Math.floor(n || 0); return n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' : String(n); }
@@ -56,6 +63,11 @@ const MenuScreen = (() => {
       else if (act === 'leaderboard') { _view = 'leaderboard'; _render(); _fetchLeaderboard(); }
       else if (act === 'lbkind') { _lbKind = btn.dataset.kind; _render(); _fetchLeaderboard(); }
       else if (act === 'feast') { _view = 'feast'; _render(); _fetchFeast(); }
+      else if (act === 'cookbook') { _view = 'cookbook'; _render(); _fetchCookbook(); }
+      else if (act === 'create') { _view = 'create'; _submitMsg = ''; _render(); }
+      else if (act === 'pickemoji') { _captureName(); _draft.emoji = btn.dataset.emoji; _render(); }
+      else if (act === 'pickcat') { _captureName(); _draft.category = btn.dataset.cat; _render(); }
+      else if (act === 'submitdish') { _submitDish(); }
       else if (act === 'howto') { _view = 'howto'; _render(); }
       else if (act === 'reset') { _view = 'reset'; _render(); }
       else if (act === 'reset-confirm') { _doReset(); }
@@ -76,6 +88,28 @@ const MenuScreen = (() => {
     try { send('GET_FEAST_PROGRESS', {}); } catch (e) { /* dev/local */ }
     window.setTimeout(() => { if (_feast === null && _view === 'feast') { _feast = {}; _render(); } }, 1800);
   }
+  function _fetchCookbook() {
+    _book = null;
+    try { send('GET_RECIPE_BOOK', {}); } catch (e) { /* dev/local */ }
+    window.setTimeout(() => { if (_book === null && _view === 'cookbook') { _book = []; _render(); } }, 1800);
+  }
+  // preserve the typed name across re-renders (emoji/category taps rebuild the form)
+  function _captureName() {
+    const inp = document.getElementById('dish-name');
+    if (inp) _draft.name = inp.value;
+  }
+  function _submitDish() {
+    _captureName();
+    const name = (_draft.name || '').trim();
+    if (!name) { _submitMsg = 'Give your dish a name first.'; _render(); return; }
+    if (!_draft.emoji) { _submitMsg = 'Pick an emoji for your dish.'; _render(); return; }
+    if (!_draft.category) { _submitMsg = 'Pick a category.'; _render(); return; }
+    _submitMsg = '⏳ Submitting…';
+    try { send('SUBMIT_RECIPE', { name, emoji: _draft.emoji, blurb: '', category: _draft.category }); } catch (e) {}
+    _render();
+    // dev/local fallback (no server will answer)
+    window.setTimeout(() => { if (_submitMsg === '⏳ Submitting…') { _submitMsg = '🍳 Saved! (creators ranking updates on Reddit)'; _render(); } }, 2200);
+  }
 
   // Wipe all saved progress and restart fresh. Server clears the save + drops the
   // player from the leaderboard; reloading re-inits into a brand-new game.
@@ -93,7 +127,71 @@ const MenuScreen = (() => {
     else if (_view === 'howto')  el.innerHTML = _howtoHTML();
     else if (_view === 'reset')  el.innerHTML = _resetHTML();
     else if (_view === 'feast')  el.innerHTML = _feastHTML();
+    else if (_view === 'cookbook') el.innerHTML = _cookbookHTML();
+    else if (_view === 'create') el.innerHTML = _createHTML();
     else el.innerHTML = _mainHTML();
+  }
+
+  function _cookbookHTML() {
+    let body;
+    if (_book === null) {
+      body = `<div class="lb-loading">Loading the cookbook…</div>`;
+    } else if (_book.length === 0) {
+      body = `<div class="lb-empty">No community dishes yet.<br>Be the first to invent one — it can show up in other players' kitchens! 🧑‍🍳</div>`;
+    } else {
+      body = _book.map(d => `
+        <div class="cb-row">
+          <div class="cb-emoji">${_escape(d.emoji || '🍽️')}</div>
+          <div class="cb-info">
+            <div class="cb-name">${_escape(d.name || 'Mystery dish')}</div>
+            <div class="cb-by">by u/${_escape(d.creatorUsername || 'someone')} · <span class="cb-cat">${_escape(d.category || '')}</span></div>
+            ${d.blurb ? `<div class="cb-blurb">${_escape(d.blurb)}</div>` : ''}
+          </div>
+        </div>`).join('');
+    }
+    return `
+      <div class="menu-root">
+        <div class="menu-panel">
+          <div class="menu-panel-head">
+            <div class="menu-panel-title">📖 Community Cookbook</div>
+            <button class="menu-panel-close" data-act="back">✕</button>
+          </div>
+          <div class="menu-panel-body">${body}</div>
+          <div class="menu-panel-foot">
+            <button class="menu-btn play" data-act="create"><span class="mb-ico">＋</span> Create your dish</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function _createHTML() {
+    const emojiGrid = DISH_EMOJIS.map(e =>
+      `<button class="emoji-cell ${_draft.emoji === e ? 'sel' : ''}" data-act="pickemoji" data-emoji="${e}">${e}</button>`).join('');
+    const catChips = DISH_CATS.map(c =>
+      `<button class="cat-chip ${_draft.category === c ? 'sel' : ''}" data-act="pickcat" data-cat="${c}">${c}</button>`).join('');
+    return `
+      <div class="menu-root">
+        <div class="menu-panel">
+          <div class="menu-panel-head">
+            <div class="menu-panel-title">🧑‍🍳 Create a Dish</div>
+            <button class="menu-panel-close" data-act="cookbook">✕</button>
+          </div>
+          <div class="menu-panel-body">
+            <div class="cd-label">Name</div>
+            <input id="dish-name" class="cd-input" type="text" maxlength="30" placeholder="e.g. Spicy Karma Burger" value="${_escAttr(_draft.name)}">
+            <div class="cd-label">Pick an emoji</div>
+            <div class="emoji-grid">${emojiGrid}</div>
+            <div class="cd-label">Category</div>
+            <div class="cat-row">${catChips}</div>
+            <div class="cd-preview">${_draft.emoji || '🍽️'} <b>${_escape(_draft.name || 'Your dish')}</b></div>
+            ${_submitMsg ? `<div class="cd-msg">${_escape(_submitMsg)}</div>` : ''}
+            <div class="cd-note">One creation per day. When other players cook your dish you earn royalties and climb the Top Creators board.</div>
+          </div>
+          <div class="menu-panel-foot">
+            <button class="menu-btn play" data-act="submitdish"><span class="mb-ico">🚀</span> Submit Dish</button>
+          </div>
+        </div>
+      </div>`;
   }
 
   function _soundBtn() {
@@ -114,6 +212,7 @@ const MenuScreen = (() => {
         <div class="menu-btns">
           <button class="menu-btn play" data-act="play"><span class="mb-ico">▶</span> ${playLabel}</button>
           <button class="menu-btn lb"   data-act="leaderboard"><span class="mb-ico">🏆</span> Leaderboard</button>
+          <button class="menu-btn cb"   data-act="cookbook"><span class="mb-ico">📖</span> Cookbook</button>
           <button class="menu-btn htp"  data-act="howto"><span class="mb-ico">❓</span> How to Play</button>
         </div>
         <button class="menu-reset" data-act="reset">⟲ Reset progress</button>
@@ -269,6 +368,7 @@ const MenuScreen = (() => {
       { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
     ));
   }
+  function _escAttr(s) { return String(s || '').replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c])); }
 
   // ── server hookups ───────────────────────────────────────────────────────────
   window.addEventListener('devvit:INIT_RESPONSE', (ev) => {
@@ -284,6 +384,17 @@ const MenuScreen = (() => {
   window.addEventListener('devvit:FEAST_PROGRESS', (ev) => {
     _feast = ev.detail || {};
     if (_view === 'feast' || _view === 'main') _render();
+  });
+  window.addEventListener('devvit:RECIPE_BOOK', (ev) => {
+    if (_view !== 'cookbook') return;
+    _book = ev.detail?.dishes || [];
+    _render();
+  });
+  window.addEventListener('devvit:RECIPE_SUBMITTED', (ev) => {
+    if (_view !== 'create') return;
+    if (ev.detail?.ok) { _submitMsg = '🎉 Dish submitted! Find it in the Cookbook.'; _draft = { name: '', emoji: '', category: '' }; }
+    else _submitMsg = '⚠️ Couldn’t submit — you may have already created a dish today (one per day).';
+    _render();
   });
   // count this player's completed orders → "you've served N" on the feast screen
   window.addEventListener('dk:custServed', () => { _myServes++; });
