@@ -2,7 +2,7 @@ import { Devvit } from '@devvit/public-api';
 import type { Context } from '@devvit/public-api';
 import type { StationType } from '../core/save-schema.js';
 import type { WebViewMessage } from './types/messages.js';
-import { getState, saveState, resetState, incrementFeast } from './handlers/state.js';
+import { getState, getStateAndOffline, saveState, resetState, incrementFeast } from './handlers/state.js';
 import { getTodayCravings, rerollHarbor } from './handlers/cravings.js';
 import { buyUpgrade, buyNewStation, hireCook, hireServer, newVoyage } from './handlers/upgrades.js';
 import { buyMetaUpgrade, buyExtraReroll, getLeaderboard, updateRenownLeaderboard } from './handlers/prestige.js';
@@ -94,12 +94,12 @@ Devvit.addCustomPostType({
 
             const user = await context.reddit.getCurrentUser();
             const username = user?.username ?? 'Anonymous';
-            const state = await getState(context);
+            const { state, offlineEarned } = await getStateAndOffline(context);
             const { harborId, cravings } = await getTodayCravings(context, userId);
 
             postMsg(context, {
               type: 'INIT_RESPONSE',
-              data: { username, userId, state, cravings: { harborId, cravings } },
+              data: { username, userId, state, cravings: { harborId, cravings }, offlineEarned },
             });
           } catch (err) {
             // Surface the error to the client so the splash shows something useful

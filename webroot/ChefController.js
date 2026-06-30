@@ -256,12 +256,15 @@ const ChefController = (() => {
       id: st.id, x: i, y: 0, stationType: st.defId, level: st.level, hasCook: cookStations.has(st.id), hasServer: false,
     }));
     const crew = Array.from({ length: waiters }, (_, i) => ({ slotIndex: i, personality: 'steady', name: 'Waiter ' + (i + 1), subredditOrigin: '' }));
+    // Idle income: your hired crew keeps earning while you're away. Scales with
+    // how many you've hired and your kitchen tier.
+    const incomePerSec = (_staff.length) * _kitchenTier * 0.2;
     send('SAVE_STATE', { state: {
       saveVersion: 1, coins: _coins, renown: 0, tradeTokens: 0, lifetimeCoinsThisRun: _coins,
       stations, crew, voyageCount: 0, unlockedCuisineTiers: _kitchenTier - 1,
       incomeMultiplierLevel: 0, offlineCapLevel: 0, offlineEffLevel: 0, cookSpeedLevel: _chefSpeedLevel,
       startingCoinsLevel: 0, extraRerollUnlocked: false, royaltyBoostLevel: 0,
-      streak: 0, lastStreakDate: '', rerollsToday: 0, lastSeen: Date.now(), incomePerSec: 0,
+      streak: 0, lastStreakDate: '', rerollsToday: 0, lastSeen: Date.now(), incomePerSec,
     } });
   }
   setInterval(() => { if (_shiftActive && !_paused) _save(); }, 15000); // periodic autosave
@@ -284,6 +287,9 @@ const ChefController = (() => {
   window.addEventListener('devvit:INIT_RESPONSE', (ev) => {
     const st = ev.detail?.state || {};
     _coins = st.coins || 0;
+    // idle earnings are already folded into coins server-side — just announce them
+    const earned = ev.detail?.offlineEarned || 0;
+    if (earned > 0) window.dispatchEvent(new CustomEvent('dk:offlineEarned', { detail: { amount: earned } }));
     _cravings = ev.detail?.cravings?.cravings?.multipliers || [];
     _kitchenTier = Math.min(5, (st.unlockedCuisineTiers || 0) + 1);
     upgradeChefSpeed(st.cookSpeedLevel || 0);

@@ -246,6 +246,17 @@
     }
     .lb-tab.on { color:#c2410c; background:#fff6e7; box-shadow:inset 0 -3px 0 #f97316; }
 
+    /* Welcome-back (idle earnings) modal */
+    .welcome-wrap { position:absolute; inset:0; z-index:5; display:flex; align-items:center; justify-content:center;
+      background:rgba(0,0,0,0.5); padding:24px; }
+    .welcome-card { width:100%; max-width:320px; text-align:center; padding:24px 20px;
+      background:linear-gradient(180deg,#fff6e7,#f6e6cb); border-radius:22px; border:2px solid #f97316;
+      box-shadow:0 16px 48px rgba(0,0,0,0.5); }
+    .welcome-emoji { font-size:34px; margin-bottom:6px; }
+    .welcome-title { font-size:20px; font-weight:900; color:#c2410c; }
+    .welcome-sub { font-size:13px; color:#7a5436; margin:8px 0 6px; line-height:1.5; }
+    .welcome-amt { font-size:30px; font-weight:900; color:#d97706; margin-bottom:16px; }
+
     /* Interactive tutorial */
     #tutorial-overlay { position:fixed; inset:0; z-index:250; display:none; }
     .tut-backdrop { position:absolute; inset:0; background:rgba(0,0,0,0.55); }

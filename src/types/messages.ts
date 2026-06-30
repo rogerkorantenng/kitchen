@@ -29,7 +29,7 @@ export type WebViewMessage =
 
 // Server → Client (Devvit sends these to webview)
 export type DevvitMessage =
-  | { type: 'INIT_RESPONSE'; data: { username: string; userId: string; state: SaveState; cravings: { harborId: string; cravings: CravingResult } } }
+  | { type: 'INIT_RESPONSE'; data: { username: string; userId: string; state: SaveState; cravings: { harborId: string; cravings: CravingResult }; offlineEarned?: number } }
   | { type: 'STATE_RESPONSE'; data: { state: SaveState; __reqId?: number } }
   | { type: 'CRAVINGS_RESPONSE'; data: { harborId: string; cravings: CravingResult } }
   | { type: 'UPGRADE_RESPONSE'; data: { state: SaveState; ok: boolean; __reqId?: number } }

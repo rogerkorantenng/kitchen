@@ -10,7 +10,9 @@ function stateKey(userId: string): string {
 // Load state, compute offline earnings, write lastSeen = now.
 // Writing lastSeen on EVERY load (not only on blur) because
 // visibilitychange/blur does not fire reliably in Devvit iframes on Reddit mobile.
-export async function getState(context: Context): Promise<SaveState> {
+export async function getStateAndOffline(
+  context: Context
+): Promise<{ state: SaveState; offlineEarned: number }> {
   const userId = context.userId ?? 'anon';
   const raw = await context.redis.get(stateKey(userId));
   const parsed: Partial<SaveState> = raw ? JSON.parse(raw) : {};
@@ -19,21 +21,26 @@ export async function getState(context: Context): Promise<SaveState> {
   const now = Date.now();
   const elapsed = now - (state.lastSeen || now);
 
+  let offlineEarned = 0;
   if (elapsed > 0 && state.incomePerSec > 0) {
-    const earned = computeOfflineEarnings(
+    offlineEarned = computeOfflineEarnings(
       state.incomePerSec,
       elapsed,
       state.offlineCapLevel,
       state.offlineEffLevel
     );
-    state.coins += earned;
-    state.lifetimeCoinsThisRun += earned;
+    state.coins += offlineEarned;
+    state.lifetimeCoinsThisRun += offlineEarned;
   }
 
   state.lastSeen = now;
   await context.redis.set(stateKey(userId), JSON.stringify(state));
 
-  return state;
+  return { state, offlineEarned };
+}
+
+export async function getState(context: Context): Promise<SaveState> {
+  return (await getStateAndOffline(context)).state;
 }
 
 // Explicit save — called on purchases, upgrades, prestige, offline-claim

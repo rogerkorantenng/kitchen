@@ -12,6 +12,7 @@ const MenuScreen = (() => {
   let _myServes = 0;             // orders this player has completed this run
   let _shown = false;            // has the player left the menu yet this session?
   let _inGame = false;           // opened as a pause menu mid-shift? (Play → Resume)
+  let _welcome = 0;              // idle coins earned while away (welcome-back modal)
   let _book = null;              // cached community cookbook dishes (null = loading)
   let _draft = { name: '', emoji: '', category: '' }; // dish being created
   let _submitMsg = '';           // feedback under the Create form
@@ -72,6 +73,7 @@ const MenuScreen = (() => {
       else if (act === 'reset') { _view = 'reset'; _render(); }
       else if (act === 'reset-confirm') { _doReset(); }
       else if (act === 'sound') { window.MUSIC?.toggle(); _render(); }
+      else if (act === 'welcome-ok') { _welcome = 0; window.SFX?.coin?.(); _render(); }
       else if (act === 'back') { _view = 'main'; _render(); }
     });
   }
@@ -130,6 +132,21 @@ const MenuScreen = (() => {
     else if (_view === 'cookbook') el.innerHTML = _cookbookHTML();
     else if (_view === 'create') el.innerHTML = _createHTML();
     else el.innerHTML = _mainHTML();
+    // welcome-back modal layers on top of whatever view is showing
+    if (_welcome > 0) el.insertAdjacentHTML('beforeend', _welcomeHTML());
+  }
+
+  function _welcomeHTML() {
+    return `
+      <div class="welcome-wrap">
+        <div class="welcome-card">
+          <div class="welcome-emoji">😴➡️🤑</div>
+          <div class="welcome-title">Welcome back, chef!</div>
+          <div class="welcome-sub">Your crew kept the kitchen running while you were away and earned</div>
+          <div class="welcome-amt">🪙 ${_fmt(_welcome)}</div>
+          <button class="menu-btn play" data-act="welcome-ok"><span class="mb-ico">✓</span> Collect</button>
+        </div>
+      </div>`;
   }
 
   function _cookbookHTML() {
@@ -398,6 +415,12 @@ const MenuScreen = (() => {
   });
   // count this player's completed orders → "you've served N" on the feast screen
   window.addEventListener('dk:custServed', () => { _myServes++; });
+  // idle earnings → welcome-back modal (only meaningful if the menu is up)
+  window.addEventListener('dk:offlineEarned', (ev) => {
+    _welcome = ev.detail?.amount || 0;
+    const el = _el();
+    if (_welcome > 0 && el && el.style.display !== 'none') _render();
+  });
 
   // In-game Pause button (HUD) opens this menu with the shift frozen.
   window.addEventListener('dk:pauseMenu', showPause);

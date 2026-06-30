@@ -118,14 +118,16 @@ const CustomerManager = (() => {
     _drawTicket(scene, cust, objs, cx, s.ticketCY, w);
     objs.bar = scene.add.graphics().setDepth(15);
 
-    // special-customer badge floating above the head (VIP / food critic)
+    // special-customer badge — sits ABOVE the order ticket so it never covers the food
     if (cust.type === 'vip' || cust.type === 'critic') {
       const isCrit = cust.type === 'critic';
-      objs.badge = scene.add.text(cx, hy - w * 0.62, isCrit ? '🎩 CRITIC' : '👑 VIP', {
-        fontSize: Math.max(9, Math.round(w * 0.16)) + 'px', fontStyle: 'bold',
+      const badgeY = s.ticketCY - Math.max(13, w * 0.18);
+      objs.badge = scene.add.text(cx, badgeY, isCrit ? '🎩 CRITIC' : '👑 VIP', {
+        fontSize: Math.max(9, Math.round(w * 0.14)) + 'px', fontStyle: 'bold',
         color: '#fff', stroke: isCrit ? '#7c2d12' : '#6d28d9', strokeThickness: 4,
+        backgroundColor: isCrit ? '#b45309' : '#7e22ce', padding: { x: 5, y: 1 },
       }).setOrigin(0.5).setDepth(16);
-      scene.tweens.add({ targets: objs.badge, y: objs.badge.y - 3, duration: 760, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+      scene.tweens.add({ targets: objs.badge, y: badgeY - 3, duration: 760, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
     }
 
     objs.group = [objs.body, objs.face, objs.ticket, objs.bar];
