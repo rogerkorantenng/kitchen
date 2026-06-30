@@ -25,6 +25,7 @@ const HUD = (() => {
           <div id="hud-day" class="hud-day">DAY 1</div>
           <div id="hud-timer" class="hud-timer">1:00</div>
           <div id="hud-combo" class="hud-combo"></div>
+          <div id="hud-rush" class="hud-rush"></div>
         </div>
         <div class="hud-right">
           <button id="hud-pause" class="hud-shop">⏸</button>
@@ -119,6 +120,9 @@ const HUD = (() => {
     if (el) el.textContent = '⏸ ' + el.textContent;
   });
   window.addEventListener('dk:shiftResumed', (ev) => _startTimer(ev.detail.remainingMs));
+  window.addEventListener('dk:rushStart', () => { const el = document.getElementById('hud-rush'); if (el) { el.textContent = '🔥 RUSH HOUR · 2× TIPS'; el.classList.add('on'); } });
+  window.addEventListener('dk:rushEnd',   () => { const el = document.getElementById('hud-rush'); if (el) { el.textContent = ''; el.classList.remove('on'); } });
+  window.addEventListener('dk:shiftEnded', () => { const el = document.getElementById('hud-rush'); if (el) { el.textContent = ''; el.classList.remove('on'); } });
 
   function _setHarbor(harborId, mults) {
     const h = document.getElementById('hud-harbor');

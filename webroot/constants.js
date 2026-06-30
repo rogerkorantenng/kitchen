@@ -138,12 +138,20 @@ const CUSTOMER_PATIENCE = {
   regular:   32000,
   impatient: 22000,
   vip:       45000,
+  critic:    34000,
 };
-// Pay multiplier per customer type (VIP tips bigger)
-const CUSTOMER_PAY_MULT = { regular: 1, impatient: 1.15, vip: 1.6 };
+// Pay multiplier per customer type (VIP tips bigger; the food critic pays huge)
+const CUSTOMER_PAY_MULT = { regular: 1, impatient: 1.15, vip: 1.6, critic: 2.6 };
 
 const SPAWN_INTERVAL_MS = 4000;
 const MAX_WAITING = 5;
+
+// ─── Rush Hour ────────────────────────────────────────────────────────────────
+// A mid-shift surge: customers pour in faster and every tip is boosted.
+const RUSH_AT_FRACTION = 0.42;   // when in the shift the rush hits
+const RUSH_DURATION_MS = 22000;  // how long it lasts
+const RUSH_SPAWN_FACTOR = 0.45;  // spawn interval multiplier during rush (lower = faster)
+const RUSH_PAY_MULT = 2.0;       // tip boost while rushing (matches the "2× TIPS" banner)
 
 // ─── Shift / day progression ──────────────────────────────────────────────────
 // Shift length grows with tier; difficulty scales by day. Long shifts so the

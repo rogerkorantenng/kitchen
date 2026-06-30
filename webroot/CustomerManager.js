@@ -9,24 +9,35 @@ const CustomerManager = (() => {
   let _kitchenTier = 1;
   let _difficulty = 1;
   let _paused = false, _pauseAt = 0;
+  let _rush = false;
   const SLOTS = 4;
 
   function _scene() { return window.CHEF_SCENE; }
 
   function startSpawning(tier, difficulty) {
-    _kitchenTier = tier; _difficulty = difficulty || 1; _paused = false;
+    _kitchenTier = tier; _difficulty = difficulty || 1; _paused = false; _rush = false;
     stopSpawning(); _scheduleNext(900);
   }
   function stopSpawning() { if (_spawnTimer) { clearTimeout(_spawnTimer); _spawnTimer = null; } }
 
   function _scheduleNext(forced) {
-    const base = SPAWN_INTERVAL_MS / Math.pow(_difficulty, 0.4);
+    let base = SPAWN_INTERVAL_MS / Math.pow(_difficulty, 0.4);
+    if (_rush) base *= RUSH_SPAWN_FACTOR;     // customers pour in during a rush
     const delay = forced != null ? forced : base * 0.7 + Math.random() * base * 0.6;
     _spawnTimer = window.setTimeout(() => {
       if (getCustomers().length < SLOTS) _spawnOne();
       _scheduleNext();
     }, delay);
   }
+
+  // Rush Hour — driven by ChefController's shift clock.
+  function startRush() {
+    if (_paused) return;
+    _rush = true;
+    stopSpawning(); _scheduleNext(200);       // immediately ramp the queue
+  }
+  function endRush() { _rush = false; }
+  function isRushing() { return _rush; }
 
   function _spawnOne() {
     if (!_scene()) return;
@@ -40,12 +51,13 @@ const CustomerManager = (() => {
     const slot = free[Math.floor(Math.random()*free.length)];
 
     const roll = Math.random();
-    const type = roll < 0.1 ? 'vip' : roll < 0.28 ? 'impatient' : 'regular';
+    const type = roll < 0.07 ? 'critic' : roll < 0.16 ? 'vip' : roll < 0.34 ? 'impatient' : 'regular';
     const patience = (CUSTOMER_PATIENCE[type] || 32000) / Math.pow(_difficulty, 0.3);
 
     const id = 'c' + (++_cid);
     const style = DrawChar.randomStyle(_cid);
     if (type === 'vip') { style.accessory = 'crown'; style.shirt = 0x7e57c2; style.shirtDark = 0x4527a0; }
+    if (type === 'critic') { style.accessory = 'glasses'; style.shirt = 0x1f2937; style.shirtDark = 0x0b1220; }
     const cust = {
       id, slot, order, type, delivered: order.map(() => false),
       served: false, leaving: false, spawnedAt: Date.now(), patienceMs: patience,
@@ -106,7 +118,18 @@ const CustomerManager = (() => {
     _drawTicket(scene, cust, objs, cx, s.ticketCY, w);
     objs.bar = scene.add.graphics().setDepth(15);
 
+    // special-customer badge floating above the head (VIP / food critic)
+    if (cust.type === 'vip' || cust.type === 'critic') {
+      const isCrit = cust.type === 'critic';
+      objs.badge = scene.add.text(cx, hy - w * 0.62, isCrit ? '🎩 CRITIC' : '👑 VIP', {
+        fontSize: Math.max(9, Math.round(w * 0.16)) + 'px', fontStyle: 'bold',
+        color: '#fff', stroke: isCrit ? '#7c2d12' : '#6d28d9', strokeThickness: 4,
+      }).setOrigin(0.5).setDepth(16);
+      scene.tweens.add({ targets: objs.badge, y: objs.badge.y - 3, duration: 760, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+    }
+
     objs.group = [objs.body, objs.face, objs.ticket, objs.bar];
+    if (objs.badge) objs.group.push(objs.badge);
     objs._hitW = w * 1.2; objs._hitTop = hy - w * 0.5; objs._hitBot = ledge + w * 0.1;
     cust.objs = objs;
   }
@@ -242,13 +265,15 @@ const CustomerManager = (() => {
       if (_scene()) _scene().tweens.add({ targets: c.objs.head, y: '-=8', duration: 130, yoyo: true });
       _leave(c, true);
     }
-    return { accepted: true, complete, speedFactor, baseEarned, slot: c.slot, order: c.order.slice() };
+    return { accepted: true, complete, speedFactor, baseEarned, slot: c.slot, order: c.order.slice(), custType: c.type };
   }
   function resetForNewShift() { Object.keys(_customers).forEach(_destroy); stopSpawning(); }
 
   window.addEventListener('dk:relayout', _relayout);
+  window.addEventListener('dk:rushStart', startRush);
+  window.addEventListener('dk:rushEnd', endRush);
 
-  return { startSpawning, stopSpawning, pause, resume, getCustomers, customerAt, getServePoint, customerNeeds, matchesOrder, deliverItem, setServeHighlight, clearServeHighlight, resetForNewShift };
+  return { startSpawning, stopSpawning, pause, resume, getCustomers, customerAt, getServePoint, customerNeeds, matchesOrder, deliverItem, setServeHighlight, clearServeHighlight, resetForNewShift, startRush, endRush, isRushing };
 })();
 
 window.CUSTOMER_MGR = CustomerManager;

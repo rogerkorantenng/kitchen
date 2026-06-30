@@ -78,6 +78,10 @@ const ParticleEffects = (() => {
   window.addEventListener('dk:goalHit', () => {
     confettiRain(); bigToast('⭐ GOAL HIT!', '#22c55e'); window.SFX?.perfect();
   });
+  window.addEventListener('dk:rushStart', () => {
+    bigToast('🔥 RUSH HOUR!', '#ef4444');
+    window.CHEF_SCENE?.cameras.main.shake(220, 0.004); window.SFX?.perfect();
+  });
 
   return { coinArc, upgradeSlamBurst, serveBurst, bigToast, confettiRain };
 })();

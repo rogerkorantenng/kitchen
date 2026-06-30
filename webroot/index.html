@@ -50,6 +50,10 @@
     }
     .hud-shop:active { transform:scale(0.9); }
     .hud-combo { font-size:12px; font-weight:900; color:#fb923c; height:14px; line-height:14px; transition:transform 0.12s; text-shadow:0 1px 3px rgba(0,0,0,0.5); }
+    .hud-rush { font-size:11px; font-weight:900; color:#fff; height:0; overflow:hidden; opacity:0; transition:opacity 0.2s;
+      background:linear-gradient(90deg,#ef4444,#f97316); border-radius:8px; padding:0 8px; margin-top:0; letter-spacing:0.3px; }
+    .hud-rush.on { height:18px; line-height:18px; opacity:1; margin-top:3px; animation:rushpulse 0.7s ease-in-out infinite; box-shadow:0 0 12px rgba(239,68,68,0.7); }
+    @keyframes rushpulse { 50% { transform:scale(1.06); box-shadow:0 0 18px rgba(239,68,68,0.95); } }
     .hud-goal {
       display:flex; align-items:center; gap:8px; padding:2px 12px 3px;
       background:linear-gradient(180deg,rgba(74,46,22,0.92),rgba(60,37,18,0.88));

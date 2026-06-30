@@ -11,6 +11,7 @@ const ChefController = (() => {
   let _rep = 60, _day = 1, _kitchenTier = 1;
   let _shiftTimer = null, _shiftActive = false, _paused = false;
   let _endTime = 0, _remainingMs = 0;
+  let _rushTimer = null, _rushEndTimer = null, _rushActive = false;
   let _cravings = [];
   let _goalHitThisShift = false;
   let _staff = [];
@@ -71,14 +72,20 @@ const ChefController = (() => {
     const comboMult = Math.min(3, 1 + (_combo - 1) * 0.2);
     const craving = (res.order || []).reduce((m, t) => Math.max(m, _cravingMult(t)), 1);
     const perfect = res.speedFactor > 0.7;
-    let earned = Math.ceil(res.baseEarned * craving * comboMult * (perfect ? 1.25 : 1));
+    const rushMult = _rushActive ? RUSH_PAY_MULT : 1;
+    let earned = Math.ceil(res.baseEarned * craving * comboMult * (perfect ? 1.25 : 1) * rushMult);
     _coins += earned; _shiftCoins += earned; _served++;
     _setRep(_rep + REP_PER_SERVE); _updateCoins();
     // milestone juice: every 5th combo, and the moment the daily goal is reached
     if (_combo >= 5 && _combo % 5 === 0) window.dispatchEvent(new CustomEvent('dk:comboMilestone', { detail: { combo: _combo } }));
     if (!_goalHitThisShift && _goal > 0 && _shiftCoins >= _goal) { _goalHitThisShift = true; window.dispatchEvent(new CustomEvent('dk:goalHit')); }
-    window.SFX?.serve(_combo); if (perfect) window.SFX?.perfect();
-    const bonus = craving > 1 ? ` ×${craving}🔥` : '';
+    // food critic served → extra reputation + a celebration
+    if (res.custType === 'critic') {
+      _setRep(_rep + 3);
+      if (window.PARTICLE_FX) { window.PARTICLE_FX.bigToast('🎩 CRITIC IMPRESSED!', '#fbbf24'); window.PARTICLE_FX.confettiRain(); }
+    }
+    window.SFX?.serve(_combo); if (perfect || res.custType === 'critic') window.SFX?.perfect();
+    const bonus = (craving > 1 ? ` ×${craving}🔥` : '') + (_rushActive ? ' 🔥RUSH' : '');
     scene.showFloatText(sp.x, ly, `+${earned}🪙${bonus}`, '#fbbf24', 17);
     if (_combo >= 2) scene.showFloatText(sp.x, ly - 22, `COMBO ×${_combo}`, '#f97316', 14);
     if (perfect) scene.showFloatText(sp.x, ly - 40, '⭐ PERFECT', '#22c55e', 13);
@@ -166,8 +173,26 @@ const ChefController = (() => {
     const r = _goal > 0 ? _shiftCoins / _goal : 0;
     return r >= 1 ? 3 : r >= 0.65 ? 2 : r >= 0.35 ? 1 : 0;
   }
+  // ── Rush Hour ──────────────────────────────────────────────────────────────
+  function _clearRushTimers() {
+    if (_rushTimer) { clearTimeout(_rushTimer); _rushTimer = null; }
+    if (_rushEndTimer) { clearTimeout(_rushEndTimer); _rushEndTimer = null; }
+  }
+  function _startRush() {
+    if (!_shiftActive || _paused) return;
+    _rushActive = true;
+    window.dispatchEvent(new CustomEvent('dk:rushStart'));
+    _rushEndTimer = window.setTimeout(_endRush, RUSH_DURATION_MS);
+  }
+  function _endRush() {
+    if (!_rushActive) return;
+    _rushActive = false;
+    window.dispatchEvent(new CustomEvent('dk:rushEnd'));
+  }
+
   function _finishShift() {
     _shiftActive = false; _paused = false;
+    _clearRushTimers(); _endRush();
     window.CUSTOMER_MGR?.stopSpawning();
     window.STAFF_MGR?.endShift();
     window.dispatchEvent(new CustomEvent('dk:shiftEnded', { detail: {
@@ -187,14 +212,18 @@ const ChefController = (() => {
     window.dispatchEvent(new CustomEvent('dk:shiftStarted', { detail: { durationMs, day: _day, tier: _kitchenTier, goal: _goal } }));
     if (_shiftTimer) clearTimeout(_shiftTimer);
     _shiftTimer = window.setTimeout(_finishShift, durationMs);
+    // schedule the mid-shift rush
+    _clearRushTimers(); _rushActive = false;
+    _rushTimer = window.setTimeout(_startRush, durationMs * RUSH_AT_FRACTION);
   }
-  function endShift() { if (_shiftTimer) clearTimeout(_shiftTimer); _shiftActive = false; window.CUSTOMER_MGR?.stopSpawning(); }
+  function endShift() { if (_shiftTimer) clearTimeout(_shiftTimer); _clearRushTimers(); _endRush(); _shiftActive = false; window.CUSTOMER_MGR?.stopSpawning(); }
 
   // Pause/resume so the player can shop mid-shift without losing customers.
   function pauseShift() {
     if (!_shiftActive || _paused) return;
     _paused = true; _remainingMs = Math.max(0, _endTime - Date.now());
     if (_shiftTimer) clearTimeout(_shiftTimer);
+    _clearRushTimers(); _endRush();           // a paused shift cancels any rush in flight
     window.CUSTOMER_MGR?.pause(); window.STAFF_MGR?.endShift();
     window.dispatchEvent(new CustomEvent('dk:shiftPaused', { detail: { remainingMs: _remainingMs } }));
   }
