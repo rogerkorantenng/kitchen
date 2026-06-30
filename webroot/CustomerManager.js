@@ -264,7 +264,9 @@ const CustomerManager = (() => {
       const base = c.order.reduce((s, t) => s + (DISHES[t]?.coins || 5), 0);
       baseEarned = Math.ceil(base * (CUSTOMER_PAY_MULT[c.type] || 1) * (1 + speedFactor * TIP_SPEED_BONUS));
       window.dispatchEvent(new CustomEvent('dk:custServed', { detail: { id, type: c.type } }));
-      if (_scene()) _scene().tweens.add({ targets: c.objs.head, y: '-=8', duration: 130, yoyo: true });
+      // happy bounce on serve — the customer (body + face), not a nonexistent "head"
+      const hop = [c.objs.body, c.objs.face].filter(Boolean);
+      if (_scene() && hop.length) _scene().tweens.add({ targets: hop, y: '-=8', duration: 130, yoyo: true });
       _leave(c, true);
     }
     return { accepted: true, complete, speedFactor, baseEarned, slot: c.slot, order: c.order.slice(), custType: c.type };

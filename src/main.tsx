@@ -138,11 +138,18 @@ Devvit.addCustomPostType({
               msg.data.state.lifetimeCoinsThisRun ?? 0,
               msg.data.state.coins ?? 0
             );
-            if (best > 0) {
-              const user = await context.reddit.getCurrentUser();
-              const username = user?.username ?? 'Anonymous';
+            // Leaderboard must never go DOWN (spending coins on upgrades shouldn't
+            // drop your rank), so only write when this run beats the stored best.
+            const prev = (await context.redis.zScore('leaderboard:renown', userId)) ?? 0;
+            if (best > prev) {
               await context.redis.zAdd('leaderboard:renown', { member: userId, score: best });
-              await context.redis.set(`username:${userId}`, username);
+              // Cache the username once — avoids a getCurrentUser() API call on every autosave.
+              const nameKey = `username:${userId}`;
+              const have = await context.redis.get(nameKey);
+              if (!have) {
+                const user = await context.reddit.getCurrentUser();
+                await context.redis.set(nameKey, user?.username ?? 'Anonymous');
+              }
             }
           } catch {
             /* leaderboard is best-effort; never block a save on it */

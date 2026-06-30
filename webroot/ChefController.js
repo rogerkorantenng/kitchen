@@ -11,7 +11,7 @@ const ChefController = (() => {
   let _rep = 60, _day = 1, _kitchenTier = 1;
   let _shiftTimer = null, _shiftActive = false, _paused = false;
   let _endTime = 0, _remainingMs = 0;
-  let _rushTimer = null, _rushEndTimer = null, _rushActive = false;
+  let _rushTimer = null, _rushEndTimer = null, _rushActive = false, _rushFired = false;
   let _cravings = [];
   let _goalHitThisShift = false;
   let _staff = [];
@@ -180,7 +180,7 @@ const ChefController = (() => {
   }
   function _startRush() {
     if (!_shiftActive || _paused) return;
-    _rushActive = true;
+    _rushActive = true; _rushFired = true;
     window.dispatchEvent(new CustomEvent('dk:rushStart'));
     _rushEndTimer = window.setTimeout(_endRush, RUSH_DURATION_MS);
   }
@@ -213,7 +213,7 @@ const ChefController = (() => {
     if (_shiftTimer) clearTimeout(_shiftTimer);
     _shiftTimer = window.setTimeout(_finishShift, durationMs);
     // schedule the mid-shift rush
-    _clearRushTimers(); _rushActive = false;
+    _clearRushTimers(); _rushActive = false; _rushFired = false;
     _rushTimer = window.setTimeout(_startRush, durationMs * RUSH_AT_FRACTION);
   }
   function endShift() { if (_shiftTimer) clearTimeout(_shiftTimer); _clearRushTimers(); _endRush(); _shiftActive = false; window.CUSTOMER_MGR?.stopSpawning(); }
@@ -233,6 +233,10 @@ const ChefController = (() => {
     window.CUSTOMER_MGR?.resume(); window.STAFF_MGR?.beginShift();
     if (_shiftTimer) clearTimeout(_shiftTimer);
     _shiftTimer = window.setTimeout(_finishShift, _remainingMs);
+    // re-arm the rush if it hadn't happened yet (a pause shouldn't cancel it)
+    if (!_rushFired && !_rushActive && _remainingMs > 4000) {
+      _rushTimer = window.setTimeout(_startRush, _remainingMs * 0.4);
+    }
     window.dispatchEvent(new CustomEvent('dk:shiftResumed', { detail: { remainingMs: _remainingMs } }));
   }
 
