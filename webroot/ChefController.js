@@ -12,6 +12,7 @@ const ChefController = (() => {
   let _shiftTimer = null, _shiftActive = false, _paused = false;
   let _endTime = 0, _remainingMs = 0;
   let _cravings = [];
+  let _goalHitThisShift = false;
   let _staff = [];
   let _chefSpeedLevel = 0;
   let _playPressed = false, _pendingStart = null;
@@ -73,6 +74,9 @@ const ChefController = (() => {
     let earned = Math.ceil(res.baseEarned * craving * comboMult * (perfect ? 1.25 : 1));
     _coins += earned; _shiftCoins += earned; _served++;
     _setRep(_rep + REP_PER_SERVE); _updateCoins();
+    // milestone juice: every 5th combo, and the moment the daily goal is reached
+    if (_combo >= 5 && _combo % 5 === 0) window.dispatchEvent(new CustomEvent('dk:comboMilestone', { detail: { combo: _combo } }));
+    if (!_goalHitThisShift && _goal > 0 && _shiftCoins >= _goal) { _goalHitThisShift = true; window.dispatchEvent(new CustomEvent('dk:goalHit')); }
     window.SFX?.serve(_combo); if (perfect) window.SFX?.perfect();
     const bonus = craving > 1 ? ` ×${craving}🔥` : '';
     scene.showFloatText(sp.x, ly, `+${earned}🪙${bonus}`, '#fbbf24', 17);
@@ -174,7 +178,7 @@ const ChefController = (() => {
   }
   function startShift(tier) {
     _kitchenTier = tier || _kitchenTier;
-    _shiftActive = true; _paused = false; _shiftCoins = 0; _served = 0; _combo = 0; _goal = _computeGoal(); _setHand(null);
+    _shiftActive = true; _paused = false; _shiftCoins = 0; _served = 0; _combo = 0; _goalHitThisShift = false; _goal = _computeGoal(); _setHand(null);
     window.STATION_MGR?.resetForNewShift();
     window.CUSTOMER_MGR?.startSpawning(_kitchenTier, _day);
     window.STAFF_MGR?.beginShift();

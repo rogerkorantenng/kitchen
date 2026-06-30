@@ -4,9 +4,12 @@
 // CSP-safe: no inline onclick — one delegated listener bound with addEventListener.
 
 const MenuScreen = (() => {
-  let _view = 'main';            // 'main' | 'leaderboard' | 'howto' | 'reset'
+  let _view = 'main';            // 'main' | 'leaderboard' | 'howto' | 'reset' | 'feast'
   let _me = '';                  // current player's username (for "YOU" highlight)
   let _lb = null;                // cached leaderboard entries (null = loading)
+  let _lbKind = 'renown';        // 'renown' (Top Chefs) | 'creators' (Top Creators)
+  let _feast = null;             // cached community-feast progress (null = loading)
+  let _myServes = 0;             // orders this player has completed this run
   let _shown = false;            // has the player left the menu yet this session?
   let _inGame = false;           // opened as a pause menu mid-shift? (Play → Resume)
 
@@ -51,18 +54,27 @@ const MenuScreen = (() => {
         _inGame = false; hide();
       }
       else if (act === 'leaderboard') { _view = 'leaderboard'; _render(); _fetchLeaderboard(); }
+      else if (act === 'lbkind') { _lbKind = btn.dataset.kind; _render(); _fetchLeaderboard(); }
+      else if (act === 'feast') { _view = 'feast'; _render(); _fetchFeast(); }
       else if (act === 'howto') { _view = 'howto'; _render(); }
       else if (act === 'reset') { _view = 'reset'; _render(); }
       else if (act === 'reset-confirm') { _doReset(); }
+      else if (act === 'sound') { window.MUSIC?.toggle(); _render(); }
       else if (act === 'back') { _view = 'main'; _render(); }
     });
   }
 
   function _fetchLeaderboard() {
     _lb = null;                       // show loading
-    try { send('GET_LEADERBOARD', { kind: 'renown' }); } catch (e) { /* dev/local */ }
+    const kind = _lbKind;
+    try { send('GET_LEADERBOARD', { kind }); } catch (e) { /* dev/local */ }
     // dev/local fallback: no server will answer, so surface the empty state.
     window.setTimeout(() => { if (_lb === null && _view === 'leaderboard') { _lb = []; _render(); } }, 1800);
+  }
+  function _fetchFeast() {
+    _feast = null;
+    try { send('GET_FEAST_PROGRESS', {}); } catch (e) { /* dev/local */ }
+    window.setTimeout(() => { if (_feast === null && _view === 'feast') { _feast = {}; _render(); } }, 1800);
   }
 
   // Wipe all saved progress and restart fresh. Server clears the save + drops the
@@ -80,7 +92,13 @@ const MenuScreen = (() => {
     if (_view === 'leaderboard') el.innerHTML = _leaderboardHTML();
     else if (_view === 'howto')  el.innerHTML = _howtoHTML();
     else if (_view === 'reset')  el.innerHTML = _resetHTML();
+    else if (_view === 'feast')  el.innerHTML = _feastHTML();
     else el.innerHTML = _mainHTML();
+  }
+
+  function _soundBtn() {
+    const on = window.MUSIC ? window.MUSIC.isOn() : true;
+    return `<button class="menu-sound" data-act="sound" title="Sound">${on ? '🔊' : '🔇'}</button>`;
   }
 
   function _mainHTML() {
@@ -88,9 +106,11 @@ const MenuScreen = (() => {
     const sub = _inGame ? '⏸ Paused' : 'Cook · Serve · Earn · Upgrade';
     return `
       <div class="menu-root">
+        ${_soundBtn()}
         <div class="menu-logo">🍳</div>
         <div class="menu-title">DRIFT <span class="accent">KITCHEN</span></div>
         <div class="menu-sub">${sub}</div>
+        ${_feastBannerHTML()}
         <div class="menu-btns">
           <button class="menu-btn play" data-act="play"><span class="mb-ico">▶</span> ${playLabel}</button>
           <button class="menu-btn lb"   data-act="leaderboard"><span class="mb-ico">🏆</span> Leaderboard</button>
@@ -98,6 +118,54 @@ const MenuScreen = (() => {
         </div>
         <button class="menu-reset" data-act="reset">⟲ Reset progress</button>
         <div class="menu-foot">${_inGame ? 'Resume to keep your current shift going' : 'Tap stations to cook · serve before customers leave'}</div>
+      </div>`;
+  }
+
+  // Live subreddit-wide feast progress, shown as a tappable banner on the menu.
+  function _feastBannerHTML() {
+    const f = _feast;
+    const prog = f && f.progress != null ? f.progress : null;
+    const thr = (f && f.threshold) || 1000;
+    const pct = prog != null ? Math.min(100, Math.round((prog / thr) * 100)) : 0;
+    const label = prog != null ? `${_fmt(prog)} / ${_fmt(thr)} dishes` : 'Tap to see today’s goal';
+    return `
+      <button class="feast-banner" data-act="feast">
+        <div class="feast-banner-top"><span>🍲 Community Feast</span><span class="feast-pct">${prog != null ? pct + '%' : '›'}</span></div>
+        <div class="feast-track"><div class="feast-fill" style="width:${pct}%"></div></div>
+        <div class="feast-sub">${label}</div>
+      </button>`;
+  }
+
+  function _feastHTML() {
+    const f = _feast;
+    let body;
+    if (_feast === null) {
+      body = `<div class="lb-loading">Loading the feast…</div>`;
+    } else {
+      const prog = f.progress != null ? f.progress : 0;
+      const thr = f.threshold || 1000;
+      const pct = Math.min(100, Math.round((prog / thr) * 100));
+      const done = prog >= thr;
+      body = `
+        <div class="feast-hero">${done ? '🎉' : '🍲'}</div>
+        <div class="feast-headline">${done ? 'Feast complete!' : 'The whole subreddit is cooking together'}</div>
+        <div class="feast-track big"><div class="feast-fill" style="width:${pct}%"></div></div>
+        <div class="feast-nums">${_fmt(prog)} / ${_fmt(thr)} dishes served &nbsp;·&nbsp; ${pct}%</div>
+        <div class="feast-you">🍽️ You’ve served <b>${_fmt(_myServes)}</b> this run</div>
+        <div class="htp-tip">Every dish you serve adds to the community goal for r/Cooking. Hit the target together to unlock the weekly feast! 🔥</div>`;
+    }
+    return `
+      <div class="menu-root">
+        <div class="menu-panel">
+          <div class="menu-panel-head">
+            <div class="menu-panel-title">🍲 Community Feast</div>
+            <button class="menu-panel-close" data-act="back">✕</button>
+          </div>
+          <div class="menu-panel-body" style="text-align:center">${body}</div>
+          <div class="menu-panel-foot">
+            <button class="menu-btn play" data-act="play"><span class="mb-ico">▶</span> ${_inGame ? 'Resume' : 'Play'}</button>
+          </div>
+        </div>
       </div>`;
   }
 
@@ -125,11 +193,15 @@ const MenuScreen = (() => {
   }
 
   function _leaderboardHTML() {
+    const creators = _lbKind === 'creators';
+    const scoreIcon = creators ? '🍳' : '🪙';
     let body;
     if (_lb === null) {
-      body = `<div class="lb-loading">Loading Top Chefs…</div>`;
+      body = `<div class="lb-loading">Loading ${creators ? 'Top Creators' : 'Top Chefs'}…</div>`;
     } else if (_lb.length === 0) {
-      body = `<div class="lb-empty">No chefs ranked yet.<br>Play a shift and bank some coins to claim the #1 spot! 🏆</div>`;
+      body = creators
+        ? `<div class="lb-empty">No creators yet.<br>Design a dish in the kitchen — when others cook it, you climb this board! 🧑‍🍳</div>`
+        : `<div class="lb-empty">No chefs ranked yet.<br>Play a shift and bank some coins to claim the #1 spot! 🏆</div>`;
     } else {
       body = _lb.map((e, i) => {
         const rank = e.rank || (i + 1);
@@ -139,7 +211,7 @@ const MenuScreen = (() => {
         return `<div class="lb-row ${isMe ? 'me' : ''}">
           <div class="lb-rank ${medal}">${badge}</div>
           <div class="lb-name">${_escape(e.username || 'Chef')}${isMe ? '<span class="you">YOU</span>' : ''}</div>
-          <div class="lb-score">🪙 ${_fmt(e.score)}</div>
+          <div class="lb-score">${scoreIcon} ${_fmt(e.score)}</div>
         </div>`;
       }).join('');
     }
@@ -147,12 +219,16 @@ const MenuScreen = (() => {
       <div class="menu-root">
         <div class="menu-panel">
           <div class="menu-panel-head">
-            <div class="menu-panel-title">🏆 Top Chefs</div>
+            <div class="menu-panel-title">🏆 Leaderboard</div>
             <button class="menu-panel-close" data-act="back">✕</button>
+          </div>
+          <div class="lb-tabs">
+            <button class="lb-tab ${creators ? '' : 'on'}" data-act="lbkind" data-kind="renown">🍳 Top Chefs</button>
+            <button class="lb-tab ${creators ? 'on' : ''}" data-act="lbkind" data-kind="creators">🧑‍🍳 Top Creators</button>
           </div>
           <div class="menu-panel-body">${body}</div>
           <div class="menu-panel-foot">
-            <button class="menu-btn play" data-act="play"><span class="mb-ico">▶</span> Play</button>
+            <button class="menu-btn play" data-act="play"><span class="mb-ico">▶</span> ${_inGame ? 'Resume' : 'Play'}</button>
           </div>
         </div>
       </div>`;
@@ -195,12 +271,22 @@ const MenuScreen = (() => {
   }
 
   // ── server hookups ───────────────────────────────────────────────────────────
-  window.addEventListener('devvit:INIT_RESPONSE', (ev) => { _me = ev.detail?.username || _me; });
+  window.addEventListener('devvit:INIT_RESPONSE', (ev) => {
+    _me = ev.detail?.username || _me;
+    // prime the feast banner so it shows live progress on the very first menu view
+    _fetchFeast();
+  });
   window.addEventListener('devvit:LEADERBOARD_DATA', (ev) => {
     if (_view !== 'leaderboard') return;
     _lb = ev.detail?.entries || [];
     _render();
   });
+  window.addEventListener('devvit:FEAST_PROGRESS', (ev) => {
+    _feast = ev.detail || {};
+    if (_view === 'feast' || _view === 'main') _render();
+  });
+  // count this player's completed orders → "you've served N" on the feast screen
+  window.addEventListener('dk:custServed', () => { _myServes++; });
 
   // In-game Pause button (HUD) opens this menu with the shift frozen.
   window.addEventListener('dk:pauseMenu', showPause);

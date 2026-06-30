@@ -43,13 +43,43 @@ const ParticleEffects = (() => {
     }
   }
 
+  // Big celebratory toast in the middle of the screen (combo milestones, goal hit).
+  function bigToast(text, color) {
+    const scene = window.CHEF_SCENE; if (!scene) return;
+    const t = scene.add.text(scene.W / 2, scene.H * 0.4, text, {
+      fontSize: '32px', fontStyle: 'bold', color: color || '#fbbf24', stroke: '#3a230f', strokeThickness: 6,
+    }).setOrigin(0.5).setDepth(6001).setScale(0.4).setAlpha(0);
+    scene.tweens.add({ targets: t, scale: 1.1, alpha: 1, duration: 240, ease: 'Back.Out', onComplete: () => {
+      scene.tweens.add({ targets: t, scale: 1, duration: 110, yoyo: true, hold: 520, onComplete: () => {
+        scene.tweens.add({ targets: t, alpha: 0, y: t.y - 28, duration: 360, onComplete: () => t.destroy() });
+      } });
+    } });
+  }
+  function confettiRain() {
+    const scene = window.CHEF_SCENE; if (!scene) return;
+    for (let i = 0; i < 26; i++) {
+      const x = Math.random() * scene.W;
+      const c = scene.add.text(x, -20, ['🎉','✨','⭐','💛','🧡'][i % 5], { fontSize: (14 + Math.random()*10) + 'px' })
+        .setOrigin(0.5).setDepth(6000);
+      scene.tweens.add({ targets: c, y: scene.H + 30, x: x + (Math.random()-0.5)*90, angle: (Math.random()-0.5)*360,
+        duration: 1400 + Math.random()*900, delay: i*30, onComplete: () => c.destroy() });
+    }
+  }
+
   window.addEventListener('dk:coinEarned', (ev) => {
     coinArc(ev.detail.x, ev.detail.y);
     serveBurst(ev.detail.x, ev.detail.y);
     if (ev.detail.amount >= 30 && window.CHEF_SCENE) window.CHEF_SCENE.cameras.main.shake(120, 0.003);
   });
+  window.addEventListener('dk:comboMilestone', (ev) => {
+    bigToast('🔥 ' + ev.detail.combo + ' COMBO!', '#f97316');
+    window.CHEF_SCENE?.cameras.main.shake(160, 0.005); window.SFX?.perfect();
+  });
+  window.addEventListener('dk:goalHit', () => {
+    confettiRain(); bigToast('⭐ GOAL HIT!', '#22c55e'); window.SFX?.perfect();
+  });
 
-  return { coinArc, upgradeSlamBurst, serveBurst };
+  return { coinArc, upgradeSlamBurst, serveBurst, bigToast, confettiRain };
 })();
 
 window.PARTICLE_FX = ParticleEffects;

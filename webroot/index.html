@@ -208,6 +208,39 @@
       font-size:12px; font-weight:800; padding:8px 16px; border-radius:12px; cursor:pointer; letter-spacing:0.3px;
     }
     .menu-reset:active { transform:scale(0.96); }
+    .menu-sound {
+      position:absolute; top:14px; right:14px; width:42px; height:42px; border-radius:13px; cursor:pointer;
+      border:1.5px solid rgba(255,255,255,0.25); background:rgba(255,255,255,0.12); font-size:20px;
+      display:flex; align-items:center; justify-content:center; z-index:2;
+    }
+    .menu-sound:active { transform:scale(0.92); }
+
+    /* Community Feast banner (menu) + panel */
+    .feast-banner {
+      width:100%; max-width:320px; margin:2px 0 2px; padding:11px 14px; cursor:pointer; text-align:left;
+      border:none; border-radius:16px; color:#fff; background:linear-gradient(135deg,#b45309,#7c2d12);
+      box-shadow:0 5px 16px rgba(0,0,0,0.3); border-bottom:3px solid rgba(0,0,0,0.22);
+    }
+    .feast-banner:active { transform:scale(0.98); }
+    .feast-banner-top { display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:900; }
+    .feast-pct { color:#fde68a; }
+    .feast-track { height:9px; border-radius:6px; background:rgba(0,0,0,0.32); margin:7px 0 5px; overflow:hidden; }
+    .feast-track.big { height:16px; border-radius:9px; margin:14px 0 8px; }
+    .feast-fill { height:100%; border-radius:6px; background:linear-gradient(90deg,#fb923c,#fde047); transition:width 0.4s; }
+    .feast-sub { font-size:11px; font-weight:700; color:rgba(255,255,255,0.85); }
+    .feast-hero { font-size:54px; margin:6px 0 2px; }
+    .feast-headline { font-size:15px; font-weight:900; color:#3a230f; margin-bottom:6px; }
+    .feast-nums { font-size:13px; font-weight:800; color:#7a5436; }
+    .feast-you { font-size:13px; font-weight:800; color:#c2410c; margin:10px 0 4px; }
+    .feast-you b { color:#3a230f; }
+
+    /* Leaderboard tabs */
+    .lb-tabs { display:flex; gap:8px; padding:10px 16px 0; }
+    .lb-tab {
+      flex:1; padding:9px 6px; border:none; border-radius:11px 11px 0 0; cursor:pointer;
+      font-size:12px; font-weight:900; color:#8b5e3c; background:rgba(0,0,0,0.05);
+    }
+    .lb-tab.on { color:#c2410c; background:#fff6e7; box-shadow:inset 0 -3px 0 #f97316; }
     .menu-foot { font-size:10px; color:rgba(240,201,138,0.55); font-weight:700; margin-top:4px; }
 
     /* sub-panels (leaderboard / how to play) */
@@ -267,6 +300,7 @@
   <script src="rpc.js"></script>
   <script src="constants.js"></script>
   <script src="Sounds.js"></script>
+  <script src="Music.js"></script>
   <script src="InputManager.js"></script>
   <script src="Characters.js"></script>
   <script src="DishArt.js"></script>
