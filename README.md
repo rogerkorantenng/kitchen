@@ -57,4 +57,4 @@ Requires [Devvit CLI](https://developers.reddit.com/docs/devvit) and a Reddit ac
 
 ## License
 
-BSD-3-Clause
+MIT

@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "type": "module",
   "private": true,
-  "license": "BSD-3-Clause",
+  "license": "MIT",
   "main": "src/main.tsx",
   "scripts": {
     "build": "devvit build",
